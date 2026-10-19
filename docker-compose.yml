@@ -1,0 +1,41 @@
+name: ai-ops-lab
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    build: ./app
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      LOG_PATH: /var/log/app/app.jsonl
+    volumes:
+      - app-logs:/var/log/app
+    ports:
+      - "${APP_BIND_IP}:8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  loadgen:
+    build: ./scripts/loadgen
+    profiles: ["load"]
+    depends_on:
+      - app
+
+volumes:
+  db-data:
+  app-logs:
