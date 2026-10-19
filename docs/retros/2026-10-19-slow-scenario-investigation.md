@@ -90,9 +90,9 @@ loadgen 10초 보고: 20 → 39 → 69 → **73(정체)** → 73, timeout 급증
 
 - **앱 JSON 로그만으로는 goodput 붕괴를 탐지하기 어렵다.** 서버 log rate는 유지되는데 **유효 성공**만 사라지는 패턴(부록: 클라 200=73 vs 서버 200=140+).
 - **규칙별 기대:**
-  - **R1 (앱 로그 기반):** 본 장애 **미탐** — access log는 T+40s 이후에도 지속.
+  - **R1 (앱 로그 기반, 에러율):** 본 장애 **미탐** — access log의 `status`가 **전부 200**(500 **0건**)이라 Watcher가 계산하는 **에러율 0%**로 유지됨.
   - **R2 (latency 임계):** `/slow` **3s sleep** 때문에 p95가 우연히 임계를 넘을 수 있으나, **goodput·큐**와 인과가 분리됨 → 단독 신뢰 낮음.
-  - **R3 (처리량 급감):** loadgen·프록시 등 **클라이언트/엣지 goodput** 또는 **성공률** 급락 — 본 시나리오 **핵심 대응**.
+  - **R3 (처리량 급감):** Watcher가 읽는 **앱 JSON 로그**에서 집계한 **서버 처리 건수(분당·구간당 요청 수)**가 직전 기준 대비 **급감** (클라이언트·loadgen 지표 아님). 본 장애에서는 평소 약 **5 req/s** → 포화 구간 약 **2.3 req/s**(약 **54% 감소**)로 **R3 탐지 가능**.
   - **R4 (합성 프로브):** Watcher가 **`/healthz`를 직접 호출**, **timeout 2s** — 큐잉·포화 시 **즉시 실패/지연** (사용자 `/healthz`와 동일 경로).
 - **추가 신호:** 리슨 **Recv-Q**, **established/close-wait** (`ss`), 부하 종료 후 **~1분 회복** 지연.
 - **Phase 3+ (nginx 등):** `X-Request-Start` / upstream timing으로 **요청 대기 시간** 직접 측정 검토.
@@ -162,7 +162,15 @@ docker compose exec -T app sh -c 'tail -n 1 /var/log/app/app.jsonl'
 
 ## 부록: loadgen 변경
 
-`scripts/loadgen/loadgen.py`에 `--timeout` (기본 15) 추가 — `urlopen(timeout=…)` 및 `thread.join(timeout=timeout+5)`에 사용.
+`scripts/loadgen/loadgen.py` (실험 2 이후·현재 코드 기준):
+
+| 항목 | 내용 |
+|------|------|
+| **`--timeout`** | 기본 **15**(초). `urllib.request.urlopen(..., timeout=args.timeout)`에 사용. |
+| **송신 루프** | `time.monotonic()` + **`next_send += interval`** — 예정 시각 기준 전송. 처리 지연이 있어도 **누적 밀림(drift) 방지**. |
+| **스레드 join** | 송신 종료 후 **`deadline = monotonic() + timeout + 5`** 한 번만 잡고, 각 스레드 `join(timeout=max(0, deadline - monotonic()))` — **전체 마감 시각** 기준. |
+| **`[final]` 출력** | `sent=`(시작한 스레드 수), **`done=`**(`stats` 합), **`unfinished=`**(sent−done), status dict, `client_p50`/`client_p95`. |
+| **인자 검증** | `--rps <= 0` 거부; **`--error-rate + --slow-rate` ∉ [0,1]** 이면 `p.error`. |
 
 ---
 
@@ -225,7 +233,7 @@ loadgen `[final]`: sent=299, 200=**73**, timeout=**226** (송신 종료 후 `joi
 | **B (10s 슬라이스)** | Σ max(0, 서버 처리 − 클라 Δ200) over T+00…60 | **74** | 구간 경계(완료 시각 vs urlopen 반환 시각) 때문에 표 A보다 소폭 큼 |
 | **C (분석 창 전체)** | (구간 내 서버 200, healthz 제외 271) − (클라 200 73) | **≈198** | 송신 종료 **후** 백로그(06:47:31–)까지 포함; “이미 timeout 난 연결에 대한 **늦은** 서버 200” |
 
-**정리:** 실험 1에서 loadgen이 **200으로 인정한 73건**과 달리, **송신 60초 동안만 보면 약 67건**, loadgen **299건 전체**와 서버 access log를 맞추면 **최대 약 198건**까지 서버-side 200이 클라이언트 성공 집계와 **어긋날** 수 있음. 반대로 **299 − 271 ≈ 28건**은 분석 창 안에서 **access log조차 없음** (accept/WSGI 대기·미완료).
+**정리:** 실험 1에서 loadgen이 **200으로 인정한 73건**과 달리, **송신 60초 동안만 보면 약 67건**, loadgen **299건 전체**와 서버 access log를 맞추면 **최대 약 198건**까지 서버-side 200이 클라이언트 성공 집계와 **어긋날** 수 있음. **06:48:30 이후** 구간에 **32건**이 추가 기록되어 **분석 창 밖**에서 처리됨. **로그 없이 유실된 요청은 없음**.
 
 ### 재현 명령 (읽기 전용)
 
