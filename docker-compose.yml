@@ -30,6 +30,12 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  loadgen:
+    build: ./scripts/loadgen
+    profiles: ["load"]
+    depends_on:
+      - app
+
 volumes:
   db-data:
   app-logs:
