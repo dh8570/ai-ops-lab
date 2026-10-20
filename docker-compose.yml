@@ -35,6 +35,26 @@ services:
     profiles: ["load"]
     depends_on:
       - app
+  
+  
+  traffic:
+    build: ./scripts/loadgen
+    command: ["--rps", "5", "--duration", "3600"]
+    profiles: ["traffic"]
+    depends_on:
+      - app
+    restart: unless-stopped
+  
+  watcher:
+    build: ./watcher
+    environment:
+      LOG_PATH: /var/log/app/app.jsonl
+      WINDOW_SEC: ${WATCHER_WINDOW_SEC:-60}
+    volumes:
+      - app-logs:/var/log/app:ro
+    depends_on:
+      - app
+    restart: unless-stopped
 
 volumes:
   db-data:
