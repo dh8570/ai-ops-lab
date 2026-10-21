@@ -43,3 +43,15 @@ class LogReader:
             except json.JSONDecodeError:
                 bad += 1                       # 깨진 줄은 세기만 하고 건너뜀
         return records, bad
+    
+    def snapshot(self) -> dict:
+        return {"offset": self.offset, "inode": self.inode}
+
+    def restore(self, snap: dict) -> None:
+        """같은 파일이고 잘리지 않았을 때만 이어서 읽는다. 아니면 생성자 기본값(파일 끝)을 유지."""
+        try:
+            st = os.stat(self.path)
+        except FileNotFoundError:
+            return
+        if st.st_ino == snap.get("inode") and st.st_size >= snap.get("offset", 0):
+            self.offset, self.inode, self.partial = snap["offset"], snap["inode"], b""

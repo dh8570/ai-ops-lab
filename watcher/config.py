@@ -21,5 +21,10 @@ class Config:
     r3_baseline_windows: int = _i("R3_BASELINE_WINDOWS", 10)
     r3_min_windows: int = _i("R3_MIN_WINDOWS", 3)
     r3_min_baseline_rpm: float = _f("R3_MIN_BASELINE_RPM", 60)
+    service: str = os.environ.get("SERVICE_NAME", "visit-counter")
+    state_path: str = os.environ.get("STATE_PATH", "/data/watcher.db")
+    resolve_windows: int = _i("RESOLVE_WINDOWS", 5)          # 연속 조용한 창 수 → RESOLVED (60초 × 5 = 5분)
+    notify_provider: str = os.environ.get("NOTIFY_PROVIDER", "slack")
+    webhook_url: str = os.environ.get("NOTIFY_WEBHOOK_URL", "")
     exclude_paths: tuple = field(default_factory=lambda: tuple(
         p for p in os.environ.get("EXCLUDE_PATHS", "/healthz").split(",") if p))
