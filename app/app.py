@@ -68,9 +68,8 @@ def handle_error(e):
 @app.get("/")
 def index():
     with db() as conn:
-        conn.execute("INSERT INTO visits DEFAULT VALUES")
-        count = conn.execute("SELECT count(*) FROM visits").fetchone()[0]
-    return jsonify(service=SERVICE, visits=count)
+        visit_id = conn.execute("INSERT INTO visits DEFAULT VALUES RETURNING id").fetchone()[0]
+    return jsonify(service=SERVICE, visits=visit_id)
 
 
 @app.get("/healthz")
