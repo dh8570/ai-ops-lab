@@ -3,9 +3,9 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
-COLOR = {"FIRING": "#E5484D", "RESOLVED": "#30A46C"}
+COLOR = {"FIRING": "#E5484D", "UPDATE": "#F59E0B", "RESOLVED": "#30A46C"}
 
 
 @dataclass
@@ -24,16 +24,22 @@ def _duration(start: str, end: str) -> str:
     return f"{sec // 60}분 {sec % 60}초"
 
 
-def build_message(kind: str, inc, stats=None, baseline=None) -> Message:
+def build_message(kind: str, inc, stats=None, baseline=None, probe=None, added=None) -> Message:
     footer = f"incident #{inc.id:04d} · ai-ops-lab watcher"
-    if kind == "FIRING":
-        rpm = f"{stats.rpm:.0f} / {baseline:.0f} rpm" if baseline else f"{stats.rpm:.0f} rpm"
-        return Message(kind, f"[FIRING] {inc.severity.upper()} · {inc.service}",
-                       "원인 분석 요약은 3주차(LLM)에서 추가됩니다.",
-                       [("규칙", ", ".join(inc.rules)), ("요청 (60초)", str(stats.requests)),
-                        ("에러율", f"{stats.error_rate:.1%}"), ("p95", f"{stats.p95_ms:,.0f} ms"),
-                        ("처리량 / 기준선", rpm)],
-                       footer, inc.opened_at)
+    if kind in ("FIRING", "UPDATE"):
+        fields = [("규칙", ", ".join(inc.rules))]
+        if kind == "UPDATE":
+            fields.insert(0, ("새로 추가된 신호", ", ".join(added or []) or "심각도 상승"))
+        if stats is not None:
+            rpm = f"{stats.rpm:.0f} / {baseline:.0f} rpm" if baseline else f"{stats.rpm:.0f} rpm"
+            fields += [("요청 (60초)", str(stats.requests)), ("에러율", f"{stats.error_rate:.1%}"),
+                       ("p95", f"{stats.p95_ms:,.0f} ms"), ("처리량 / 기준선", rpm)]
+        if probe is not None and not probe["ok"]:
+            fields.append(("헬스 체크", f"{probe['consecutive_failures']}회 연속 실패 ({probe['detail']})"))
+        desc = ("원인 분석 요약은 3주차(LLM)에서 추가됩니다." if kind == "FIRING"
+                else "진행 중인 장애에 새로운 신호가 추가됐습니다. 원인이 바뀌었을 수 있습니다.")
+        ts = inc.opened_at if kind == "FIRING" else datetime.now(UTC).isoformat(timespec="seconds")
+        return Message(kind, f"[{kind}] {inc.severity.upper()} · {inc.service}", desc, fields, footer, ts)
     return Message(kind, f"[RESOLVED] {inc.service}", "5분 연속 정상으로 장애를 닫습니다.",
                    [("지속 시간", _duration(inc.opened_at, inc.resolved_at)),
                     ("장애 창 수", str(inc.fire_windows)), ("관련 규칙", ", ".join(inc.rules))],

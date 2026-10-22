@@ -43,7 +43,7 @@ class LogReader:
             except json.JSONDecodeError:
                 bad += 1                       # 깨진 줄은 세기만 하고 건너뜀
         return records, bad
-    
+
     def snapshot(self) -> dict:
         return {"offset": self.offset, "inode": self.inode}
 

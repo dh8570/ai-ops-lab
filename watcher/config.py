@@ -26,5 +26,10 @@ class Config:
     resolve_windows: int = _i("RESOLVE_WINDOWS", 5)          # 연속 조용한 창 수 → RESOLVED (60초 × 5 = 5분)
     notify_provider: str = os.environ.get("NOTIFY_PROVIDER", "slack")
     webhook_url: str = os.environ.get("NOTIFY_WEBHOOK_URL", "")
+    probe_url: str = os.environ.get("PROBE_URL", "http://app:8000/healthz")
+    probe_interval: int = _i("PROBE_INTERVAL_SEC", 15)
+    probe_timeout: float = _f("PROBE_TIMEOUT_SEC", 2.0)
+    probe_fail_threshold: int = _i("PROBE_FAIL_THRESHOLD", 2)
+    update_grace_sec: int = _i("UPDATE_GRACE_SEC", 180)          # 장애가 열린 뒤 이 시간 안에 추가된 신호는 조용히 합침
     exclude_paths: tuple = field(default_factory=lambda: tuple(
         p for p in os.environ.get("EXCLUDE_PATHS", "/healthz").split(",") if p))

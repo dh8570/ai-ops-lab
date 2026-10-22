@@ -30,3 +30,7 @@ def evaluate(s: WindowStats, baseline_rpm: float | None, cfg: Config) -> list[Fi
         Finding("R2", "warning", r2, f"p95={s.p95_ms:.0f}ms"),
         Finding("R3", "warning", r3, r3_detail),
     ]
+
+def probe_finding(active: bool, prober) -> Finding:
+    return Finding("R4", "critical", active,
+                   f"연속 실패 {prober.consecutive_failures}회, 최근 결과 {prober.last_detail}")

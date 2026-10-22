@@ -1,7 +1,7 @@
 import json
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS incidents (
@@ -22,7 +22,7 @@ SEVERITY = {"warning": 1, "critical": 2}
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 @dataclass
@@ -36,6 +36,11 @@ class Incident:
     resolved_at: str | None
     fire_windows: int
     quiet_windows: int
+
+
+def age_sec(inc: Incident) -> float:
+    """장애가 열린 뒤 지난 시간(초)."""
+    return (datetime.now(UTC) - datetime.fromisoformat(inc.opened_at)).total_seconds()
 
 
 class Store:
@@ -91,32 +96,41 @@ class Store:
 class IncidentManager:
     """창 하나의 판정 결과로 장애 상태를 전이시키고, 무슨 일이 일어났는지 action으로 돌려준다.
 
-    action: none | fire | suppress | refire | recovering | resolve
-    알림은 fire(새 장애)와 resolve(장애 종료) 두 전이에서만 보낸다.
+    action: none | fire | suppress | refire | escalate | recovering | resolve
+    - fire: 새 장애 → FIRING 알림
+    - escalate: 열린 장애에 새 규칙 추가 또는 심각도 상승 → 유예 시간이 지났으면 UPDATE 알림
+    - resolve: 장애 종료 → RESOLVED 알림
+    나머지는 상태만 갱신하고 알림을 보내지 않는다.
     """
 
     def __init__(self, store: Store, service: str, resolve_windows: int):
         self.store, self.service, self.resolve_windows = store, service, resolve_windows
 
-    def step(self, fired: list) -> tuple[str, Incident | None]:
+    def step(self, fired: list) -> tuple[str, Incident | None, list]:
         inc = self.store.open_incident(self.service)
 
         if fired:
             rules = sorted({f.rule_id for f in fired})
             severity = max((f.severity for f in fired), key=SEVERITY.get)
             if inc is None:
-                return "fire", self.store.create(self.service, severity, rules)
+                return "fire", self.store.create(self.service, severity, rules), rules
+
+            added = sorted(set(rules) - set(inc.rules))                     # 이번에 새로 켜진 규칙
+            escalated = SEVERITY[severity] > SEVERITY[inc.severity]          # 심각도 상승
             action = "refire" if inc.state == "RECOVERING" else "suppress"
             inc = self.store.update(
                 inc.id, state="FIRING",
                 rules=sorted(set(inc.rules) | set(rules)),
                 severity=max(inc.severity, severity, key=SEVERITY.get),
                 fire_windows=inc.fire_windows + 1, quiet_windows=0)
-            return action, inc
+            return ("escalate" if added or escalated else action), inc, added
 
         if inc is None:
-            return "none", None
+            return "none", None, []
         quiet = inc.quiet_windows + 1
         if quiet >= self.resolve_windows:
-            return "resolve", self.store.update(inc.id, state="RESOLVED", quiet_windows=quiet, resolved_at=now_iso())
-        return "recovering", self.store.update(inc.id, state="RECOVERING", quiet_windows=quiet)
+            resolved = self.store.update(
+                inc.id, state="RESOLVED", quiet_windows=quiet, resolved_at=now_iso(),
+            )
+            return "resolve", resolved, []
+        return "recovering", self.store.update(inc.id, state="RECOVERING", quiet_windows=quiet), []
