@@ -14,11 +14,19 @@ def test_r1_only_on_high_error_rate():
     assert _fired_rules(stats) == ["R1"]
 
 
-# 2주차: 표본 부족 창에서 오탐하지 않도록 최소 요청 수 미만이면 전부 꺼진다.
-def test_min_requests_suppresses_all_rules():
+# 2주차: 표본 부족 창에서 오탐하지 않도록 최소 요청 수 미만이면 R1·R2는 꺼진다.
+def test_r1_r2_need_minimum_requests():
     stats = WindowStats(requests=10, errors_5xx=10, p95_ms=5000.0, rpm=10.0)
-    # 운영 루프와 같이 기준선이 아직 없을 때(R3 수집 전) 표본 부족이면 R1·R2만 막힌다.
-    assert _fired_rules(stats, baseline=None) == []
+    # 기준선 300에서는 rpm 10이라 R3가 켜지지만, R3는 최소 요청 조건이 없으므로 이 테스트의 관심사가 아니다.
+    fired = _fired_rules(stats, baseline=300.0)
+    assert "R1" not in fired
+    assert "R2" not in fired
+
+
+# 2-C 앱 완전 정지 실험에서 요청 0건 창의 R3 탐지를 고정
+def test_r3_fires_on_near_zero_traffic():
+    stats = WindowStats(requests=0, errors_5xx=0, p95_ms=0.0, rpm=0.0)
+    assert "R3" in _fired_rules(stats, baseline=300.0)
 
 
 # 2주차: p95 지연 급증 시 R2만(또는 R2 포함) 켜진다.
