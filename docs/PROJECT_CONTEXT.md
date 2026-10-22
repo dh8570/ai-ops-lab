@@ -105,11 +105,11 @@ docker compose stop app; (2분 뒤) docker compose start app                    
 - 2주차 (`feat/2-watcher` 브랜치, PR은 2-C 끝나고 한 번에)
   - 2-A 완료: 로그 집계, R1~R3, 중앙값 기준선, 배경 트래픽
   - 2-B 완료: 상태 머신, SQLite, Slack 알림, SIGTERM, 경과 시간 보정, app `count(*)` 제거
-  - **2-C 진행 중**: R4 프로브 완료, UPDATE 알림과 시간 기준 유예 완료. **남은 것은 아래 "다음 할 일"**
+  - **2-C 진행 중**: R4 프로브, UPDATE 알림(180초 유예), policy 분리, 단위 테스트 29개, ruff·pytest 검사 스크립트 완료. 남은 것은 5-2.
 
 ## 5. 다음 할 일
 
-### 5-1. 2-C: 단위 테스트와 린터 (지금 할 일)
+### 5-1. 2-C: 단위 테스트와 린터 (완료)
 
 동작을 바꾸지 않고 현재 동작을 테스트로 고정한다.
 
@@ -128,7 +128,7 @@ docker compose stop app; (2분 뒤) docker compose start app                    
    - test_probe_notifier: 타임아웃·타임아웃·성공 순서의 firing 변화 / take_window_flag 기억과 초기화 / UPDATE 메시지 첫 필드와 timestamp ≠ opened_at / Slack payload의 text가 [FIRING]으로 시작, header 블록 없음
 6. ruff 지적 수정(자동 → 수동), pytest 전부 통과, `docker compose up -d --build watcher` 후 start 로그 확인
 
-### 5-2. 2주차 마무리
+### 5-2. 2주차 마무리 (지금 할 일)
 
 - v0 합격 시험 중 알림 항목 자동화 스크립트 (2분 내 FIRING, 중복 0, 5분 후 RESOLVED)
 - 설계 그림 갱신: Fig 3(프로브 15초 별도 실행, UPDATE), Fig 4(R3 0.7·중앙값, dedup key = service, UPDATE 유예 180초), Fig 1(UPDATE 알림)
