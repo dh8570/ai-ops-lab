@@ -130,7 +130,8 @@ docker compose stop app; (2분 뒤) docker compose start app                    
 
 ### 5-2. 2주차 마무리 (지금 할 일)
 
-- v0 합격 시험 중 알림 항목 자동화 스크립트 (2분 내 FIRING, 중복 0, 5분 후 RESOLVED)
+- (완료) v0 합격 시험 중 알림 항목 자동화 스크립트: `scripts/acceptance/alerts.py`, errors 시나리오 기본 모드 약 15분 (2분 내 FIRING, 중복 0, 5분 후 RESOLVED)
+- (완료) 앱 정지 시나리오 추가: `--scenario stop`으로 R4 프로브 경로 시험 (앱 120초 정지, FIRING 60초 이내, 중복 0, 복구 후 RESOLVED)
 - 설계 그림 갱신: Fig 3(프로브 15초 별도 실행, UPDATE), Fig 4(R3 0.7·중앙값, dedup key = service, UPDATE 유예 180초), Fig 1(UPDATE 알림)
 - 2-C 노션 기록 정리 (아래 6-2 목록)
 - PR 작성·병합, 2주차 학습 노트("Watcher와 탐지 규칙")
@@ -173,6 +174,8 @@ Ollama 추가(8B 이하), LLM 호출 전 마스킹·최근 50줄 제한, 런북 
 - 원격 접속을 Tailscale SSH에서 표준 OpenSSH + 키 인증으로 변경 (Phase 0 결정 대체)
 - 판단 규칙을 policy.py로 분리해 단위 테스트, ruff·pytest는 일회용 컨테이너에서 실행(운영 이미지 미포함)
 - Claude Code 프로젝트 규칙을 CLAUDE.md에 두고, `.env` 미열람을 명시
+- 알림 판정은 채널과 무관하게 notified/notify_dryrun 이벤트의 장애 id별 집계로 한다
+- 회귀 게이트는 운영과 같은 조건(실발송)으로 돌린다. 알림 소음은 테스트 채널 분리로 해결 예정
 
 학습 메모 후보:
 - 합성 프로브는 앱 로그가 못 보는 대기열·완전 정지를 사용자 경로로 측정한다
@@ -183,3 +186,4 @@ Ollama 추가(8B 이하), LLM 호출 전 마스킹·최근 50줄 제한, 런북 
 - 측정은 실제 사용 경로를 재야 한다 (명령 실행 vs 포트 전달)
 - Ubuntu 24.04의 ssh.socket 활성화, `/run/user/UID`는 정식 로그인 세션의 표지
 - 목(mock)과 회귀 테스트, 테스트 가능한 설계(결정과 실행의 분리)
+- 에러 주입은 앱이 살아 있어 R4를 거치지 않는다. R4 경로 시험은 앱 정지 시나리오가 필요
