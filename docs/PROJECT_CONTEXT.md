@@ -29,6 +29,7 @@ ai-ops-lab/
 ├── watcher/             감지·상태 관리·알림 (표준 라이브러리만)
 ├── scripts/loadgen/     개방형 부하·장애 주입기 (loadgen·traffic 서비스가 공유)
 ├── docs/figures/        설계 그림
+├── docs/figures/src/    설계 그림 생성 소스 (python3 docs/figures/src/build.py로 5장 재생성)
 ├── docs/retros/         조사 보고서 (2026-10-19 slow 시나리오 goodput 붕괴)
 ├── docker-compose.yml   name: ai-ops-lab
 └── .env / .env.example  POSTGRES_*, APP_BIND_IP, NOTIFY_PROVIDER, NOTIFY_WEBHOOK_URL
@@ -130,9 +131,9 @@ docker compose stop app; (2분 뒤) docker compose start app                    
 
 ### 5-2. 2주차 마무리 (지금 할 일)
 
-- (완료) v0 합격 시험 중 알림 항목 자동화 스크립트: `scripts/acceptance/alerts.py`, errors 시나리오 기본 모드 약 15분 (2분 내 FIRING, 중복 0, 5분 후 RESOLVED)
+- (완료) v0 합격 시험 중 알림 항목 자동화 스크립트: `scripts/acceptance/alerts.py`, errors 시나리오 기본 모드 약 15분 (2분 내 FIRING, 중복 0, 5분 후 RESOLVED). 실측(2026-10-22~23): errors A 44초 B 1건 C 281초 / stop A 17초 B 1건 C 301초
 - (완료) 앱 정지 시나리오 추가: `--scenario stop`으로 R4 프로브 경로 시험 (앱 120초 정지, FIRING 60초 이내, 중복 0, 복구 후 RESOLVED)
-- 설계 그림 갱신: Fig 3(프로브 15초 별도 실행, UPDATE), Fig 4(R3 0.7·중앙값, dedup key = service, UPDATE 유예 180초), Fig 1(UPDATE 알림)
+- (완료) 설계 그림 갱신 (v0.2, 소스는 `docs/figures/src/`, 재생성은 `python3 docs/figures/src/build.py`): Fig 3(프로브 15초 별도 실행, UPDATE), Fig 4(R3 0.7·중앙값, dedup key = service, UPDATE 유예 180초), Fig 1(UPDATE 알림)
 - 2-C 노션 기록 정리 (아래 6-2 목록)
 - PR 작성·병합, 2주차 학습 노트("Watcher와 탐지 규칙")
 
@@ -156,6 +157,7 @@ Ollama 추가(8B 이하), LLM 호출 전 마스킹·최근 50줄 제한, 런북 
 - 학습 메모: `| 제목 | 날짜 | 단계 | 분야 | 계기 | 내용 | 개념 노트 반영 |` (분야: Docker, Linux, 네트워크, 통계, 성능, 설계, DB, 알림, 보안, Python, 진단, 운영 / 계기: 트러블슈팅, 실험, 질문, 코드 리뷰)
 - 학습 노트(개념 노트): 한 줄 요약 → 쉬운 설명 → 핵심 용어 표 → 심화 설명 → 이 프로젝트에서의 역할 → 실행한 명령어와 결과 → 트러블슈팅·의사결정 → 자주 쓰는 명령어 → 셀프 체크
 - 포스트모템: 요약 → 영향 → 원인 → 탐지 → 해결 → 교훈
+- 표는 항상 최신 항목이 맨 위. 같은 날짜 안에서는 나중에 일어난 일이 위.
 
 ### 6-2. 2-C에서 아직 노션에 정리하지 않은 내용
 
