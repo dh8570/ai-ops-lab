@@ -2,19 +2,26 @@
 """v0 합격 시험 중 알림 항목(A·B·C)을 자동으로 검증하는 E2E 스크립트.
 
 실행 위치: VM 호스트 (표준 라이브러리만 사용, Docker Compose 필요)
-    python3 scripts/acceptance/alerts.py            # 10분 주입, 약 17분 소요
-    python3 scripts/acceptance/alerts.py --quick    # 2분 주입, 개발 중 빠른 확인용 (B는 참고만)
+    python3 scripts/acceptance/alerts.py                   # errors: 10분 주입, 약 15분 소요
+    python3 scripts/acceptance/alerts.py --quick           # errors: 2분 주입, 빠른 확인용 (B는 참고만)
+    python3 scripts/acceptance/alerts.py --scenario stop   # stop: 앱 2분 정지, 약 9분 소요
 
 검증 항목
-    A  탐지 시간   에러 주입 시작 → 첫 FIRING 알림까지 120초 이내
+    A  탐지 시간   주입 시작 → 첫 FIRING 알림까지 120초 이내 (stop 시나리오는 60초)
     B  중복 없음   그 장애의 FIRING 알림이 정확히 1건
     C  복구 알림   주입 종료 후 RESOLVED 알림 도착
                    (대기 한도 = 주입 종료 + (resolve_windows + 2) × window_sec)
 
-시나리오
-    사전 조건(traffic 실행 중, 최근 window가 NORMAL, 기준선 3개 창 이상)을 확인한 뒤,
-    loadgen으로 5xx 100% 에러를 fault_sec 동안 주입하고 Watcher 로그를 따라간다.
-    사전 조건이 하나라도 안 맞으면 시험을 시작하지 않고 이유를 출력한 뒤 종료 코드 2로 끝난다.
+시나리오 (--scenario)
+    사전 조건(traffic 실행 중, 최근 window가 NORMAL, 기준선 3개 창 이상)을 확인한 뒤 장애를 주입하고
+    Watcher 로그를 따라간다. 사전 조건이 하나라도 안 맞으면 시험을 시작하지 않고 이유를 출력한 뒤
+    종료 코드 2로 끝난다.
+    errors  loadgen으로 5xx 100% 에러를 fault_sec 동안 주입한다. 앱이 살아 있어 로그 창(R1)으로 장애가 열리고
+            R4(합성 프로브) 경로는 거치지 않는다. (기본)
+    stop    docker compose stop app으로 앱을 fault_sec(기본 120초) 동안 멈췄다가 start app으로 되살린다.
+            로그가 끊기고 프로브가 실패하므로 R4 경로로 장애가 열려야 한다. A의 한도는 프로브 15초 × 2회
+            연속 실패에 여유를 더한 60초이고, "R4 즉시 장애: 예/아니오"는 참고로만 출력한다.
+            Ctrl+C나 예외로 끝나도 finally에서 start app을 실행해 앱이 멈춘 채 남지 않게 한다.
 
 왜 로그 기반으로 판정하는가
     알림의 진짜 도착지는 Slack이지만 Slack 화면은 자동으로 읽을 수 없고, 채널이 바뀌어도(Discord 등) 같은
@@ -40,6 +47,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CONTAINER = "acceptance-alerts-loadgen"      # 정리 대상을 이름으로 특정하기 위해 고정
 DETECT_LIMIT_SEC = 120                       # A의 한도
+STOP_DETECT_LIMIT_SEC = 60                   # stop 시나리오 A의 한도 (R4 프로브 15초 × 2회 + 여유)
 POLL_SEC = 5                                 # 로그를 읽는 주기
 DEFAULT_WINDOW_SEC = 60                      # start 이벤트를 못 찾았을 때 쓰는 Watcher 기본값
 DEFAULT_RESOLVE_WINDOWS = 5
@@ -119,7 +127,7 @@ def analyze(events: list[dict]) -> dict:
         (e["incident_id"] for e in events
          if e["event"] in ("window", "incident") and e.get("action") == "fire" and e.get("incident_id") is not None),
         None)
-    r = {"incident_id": incident_id, "FIRING": [], "UPDATE": [], "RESOLVED": [], "failed": []}
+    r = {"incident_id": incident_id, "FIRING": [], "UPDATE": [], "RESOLVED": [], "failed": [], "r4_immediate": []}
     if incident_id is None:
         return r
     for e in events:
@@ -129,6 +137,8 @@ def analyze(events: list[dict]) -> dict:
             r[e["kind"]].append(e)
         elif e["event"] == "notify_failed":
             r["failed"].append(e)
+        elif e["event"] == "incident" and e.get("trigger") == "R4":
+            r["r4_immediate"].append(e)             # 창을 기다리지 않고 R4 프로브가 바로 연 장애
     return r
 
 
@@ -164,11 +174,14 @@ def _raise_interrupt(signum, frame):
     raise KeyboardInterrupt
 
 
-def observe(start: datetime, fault_sec: int, window_sec: int, resolve_windows: int) -> tuple[dict, datetime | None]:
-    """RESOLVED 알림이 오거나 대기 한도가 지날 때까지 로그를 읽는다. (분석 결과, 실제 주입 종료 시각)을 돌려준다."""
+def observe(start: datetime, fault_sec: int, window_sec: int, resolve_windows: int,
+            fault_end: datetime | None = None) -> tuple[dict, datetime | None]:
+    """RESOLVED 알림이 오거나 대기 한도가 지날 때까지 로그를 읽는다. (분석 결과, 실제 주입 종료 시각)을 돌려준다.
+
+    fault_end를 미리 알고 있으면(stop 시나리오) 넘긴다. 없으면 loadgen 컨테이너가 사라진 시각으로 잡는다.
+    """
     since = start.strftime("%Y-%m-%dT%H:%M:%SZ")
     wait_after_fault = (resolve_windows + 2) * window_sec
-    fault_end: datetime | None = None
     printed: set[str] = set()
     result = analyze([])
     tick = 0
@@ -204,14 +217,14 @@ def observe(start: datetime, fault_sec: int, window_sec: int, resolve_windows: i
 
 
 def judge(result: dict, start: datetime, fault_end: datetime | None, fault_sec: int, window_sec: int,
-          resolve_windows: int, quick: bool) -> int:
+          resolve_windows: int, quick: bool, detect_limit: int = DETECT_LIMIT_SEC, scenario: str = "errors") -> int:
     limit_c = (resolve_windows + 2) * window_sec
     rows = []
 
     firing = result["FIRING"]
     if firing:
         detect = (firing[0]["_dt"] - start).total_seconds()
-        rows.append(("A", detect <= DETECT_LIMIT_SEC, f"첫 FIRING 알림까지 {detect:.0f}초 (한도 {DETECT_LIMIT_SEC}초)"))
+        rows.append(("A", detect <= detect_limit, f"첫 FIRING 알림까지 {detect:.0f}초 (한도 {detect_limit}초)"))
     else:
         rows.append(("A", False, "FIRING 알림이 오지 않음"))
 
@@ -238,18 +251,60 @@ def judge(result: dict, start: datetime, fault_end: datetime | None, fault_sec: 
         f"UPDATE 알림 {len(result['UPDATE'])}건 · 알림 전송 실패 {len(result['failed'])}건")
     for e in result["failed"]:
         log(f"  notify_failed kind={e.get('kind')} error={e.get('error')}")
+    if scenario == "stop":
+        log(f"R4 즉시 장애: {'예' if result['r4_immediate'] else '아니오'} (참고, 판정에 영향 없음)")
     if fault_end and (fault_end - start).total_seconds() < fault_sec * 0.9:
         log("[주의] 주입이 계획보다 일찍 끝났습니다. loadgen 로그를 확인하세요.")
     log(f"전체: {'PASS' if overall else 'FAIL'}")
     return 0 if overall else 1
 
 
+def run_stop_scenario(fault_sec: int, window_sec: int, resolve_windows: int, quick: bool) -> int:
+    """앱을 fault_sec 동안 멈췄다가 되살린다. 로그가 끊기므로 R4(합성 프로브) 경로로 장애가 열려야 한다."""
+    log(f"시험 시작: 앱 정지 {fault_sec}초 (docker compose stop app → start app), window {window_sec}초, "
+        f"resolve_windows {resolve_windows}{', --quick' if quick else ''}")
+    signal.signal(signal.SIGTERM, _raise_interrupt)
+    start = datetime.now(UTC)                    # 주입 시작 = stop 명령 직전
+    try:
+        log(f"[T+   0s] {start.isoformat(timespec='seconds')} docker compose stop app")
+        stop = compose("stop", "app")
+        if stop.returncode != 0:
+            log(f"app 정지 실패: {stop.stderr.strip()[:300]}")
+            return 2
+        log(f"[T+{(datetime.now(UTC) - start).total_seconds():>4.0f}s] app 정지 완료, {fault_sec}초 동안 유지")
+
+        hold_until = time.monotonic() + fault_sec
+        while time.monotonic() < hold_until:
+            time.sleep(min(30.0, max(0.0, hold_until - time.monotonic())))
+            log(f"[T+{(datetime.now(UTC) - start).total_seconds():>4.0f}s] 앱 정지 유지 중")
+
+        up = compose("start", "app")
+        fault_end = datetime.now(UTC)            # 주입 종료 = start 명령 직후
+        if up.returncode != 0:
+            log(f"app 시작 실패: {up.stderr.strip()[:300]}")
+            return 2
+        log(f"[T+{(fault_end - start).total_seconds():>4.0f}s] docker compose start app 완료 (주입 종료)")
+
+        result, _ = observe(start, fault_sec, window_sec, resolve_windows, fault_end)
+    except KeyboardInterrupt:
+        log("\n중단됨: app을 다시 시작합니다.")
+        return 130
+    finally:
+        restart = compose("start", "app")        # 어떤 경로로 끝나도 앱이 멈춘 채 남지 않게 한다
+        if restart.returncode != 0:
+            log(f"[경고] app 시작 실패, 직접 실행하세요: docker compose start app ({restart.stderr.strip()[:200]})")
+    return judge(result, start, fault_end, fault_sec, window_sec, resolve_windows, quick,
+                 detect_limit=STOP_DETECT_LIMIT_SEC, scenario="stop")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="v0 합격 시험: 알림 A(탐지 시간)·B(중복 없음)·C(복구 알림)")
-    ap.add_argument("--fault-sec", type=int, default=None, help="에러 주입 시간(초), 기본 600")
-    ap.add_argument("--quick", action="store_true", help="주입 120초로 줄인 빠른 확인용. B는 참고로만 표시")
+    ap.add_argument("--scenario", choices=("errors", "stop"), default="errors",
+                    help="errors: loadgen 5xx 주입(기본) / stop: 앱 정지로 R4 프로브 경로 시험")
+    ap.add_argument("--fault-sec", type=int, default=None, help="주입(정지) 시간(초), 기본 errors 600 / stop 120")
+    ap.add_argument("--quick", action="store_true", help="errors는 주입 120초로 줄인 빠른 확인용. B는 참고로만 표시")
     args = ap.parse_args()
-    fault_sec = args.fault_sec or (120 if args.quick else 600)
+    fault_sec = args.fault_sec or (120 if args.quick or args.scenario == "stop" else 600)
 
     window_sec, resolve_windows = load_params()
     problems = check_preconditions(window_sec)
@@ -258,6 +313,9 @@ def main() -> int:
         for p in problems:
             log(f"  - {p}")
         return 2
+
+    if args.scenario == "stop":
+        return run_stop_scenario(fault_sec, window_sec, resolve_windows, args.quick)
 
     log(f"시험 시작: 에러 주입 {fault_sec}초 (rps 3, error-rate 1.0), window {window_sec}초, "
         f"resolve_windows {resolve_windows}{', --quick' if args.quick else ''}")
