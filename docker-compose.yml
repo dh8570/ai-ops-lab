@@ -32,10 +32,37 @@ services:
 
   loadgen:
     build: ./scripts/loadgen
+    init: true
     profiles: ["load"]
     depends_on:
       - app
+  
+  
+  traffic:
+    build: ./scripts/loadgen
+    init: true
+    command: ["--rps", "5", "--duration", "3600"]
+    profiles: ["traffic"]
+    depends_on:
+      - app
+    restart: unless-stopped
+  
+  watcher:
+    build: ./watcher
+    environment:
+      LOG_PATH: /var/log/app/app.jsonl
+      WINDOW_SEC: ${WATCHER_WINDOW_SEC:-60}
+      STATE_PATH: /data/watcher.db
+      NOTIFY_PROVIDER: ${NOTIFY_PROVIDER:-slack}
+      NOTIFY_WEBHOOK_URL: ${NOTIFY_WEBHOOK_URL:-}
+    volumes:
+      - app-logs:/var/log/app:ro
+      - watcher-state:/data
+    depends_on:
+      - app
+    restart: unless-stopped
 
 volumes:
   db-data:
   app-logs:
+  watcher-state:
