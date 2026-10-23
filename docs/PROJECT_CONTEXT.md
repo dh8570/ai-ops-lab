@@ -30,7 +30,7 @@ ai-ops-lab/
 ├── scripts/loadgen/     개방형 부하·장애 주입기 (loadgen·traffic 서비스가 공유)
 ├── docs/figures/        설계 그림
 ├── docs/figures/src/    설계 그림 생성 소스 (python3 docs/figures/src/build.py로 5장 재생성)
-├── docs/retros/         조사 보고서 (2026-10-19 slow 시나리오 goodput 붕괴)
+├── docs/retros/         주차 회고(YYYY-wNN-retro.md, 노션에도 복사본 보관)와 조사 보고서
 ├── docker-compose.yml   name: ai-ops-lab
 └── .env / .env.example  POSTGRES_*, APP_BIND_IP, NOTIFY_PROVIDER, NOTIFY_WEBHOOK_URL
 ```
@@ -103,10 +103,11 @@ docker compose stop app; (2분 뒤) docker compose start app                    
 
 - Phase 0 완료 (환경, 레포, VM, 스냅샷 `docker-ready`)
 - 1주차 완료 (app, loadgen, goodput 붕괴 조사, PR 병합)
-- 2주차 (`feat/2-watcher` 브랜치, PR은 2-C 끝나고 한 번에)
+- 2주차 완료 (2-A, 2-B, 2-C, PR #3 병합. `feat/2-watcher` 브랜치)
   - 2-A 완료: 로그 집계, R1~R3, 중앙값 기준선, 배경 트래픽
   - 2-B 완료: 상태 머신, SQLite, Slack 알림, SIGTERM, 경과 시간 보정, app `count(*)` 제거
-  - **2-C 진행 중**: R4 프로브, UPDATE 알림(180초 유예), policy 분리, 단위 테스트 29개, ruff·pytest 검사 스크립트 완료. 남은 것은 5-2.
+  - 2-C 완료: R4 프로브, UPDATE 알림(180초 유예), policy 분리, 단위 테스트 29개, ruff·pytest 검사 스크립트, 알림 합격 시험 자동화(errors·stop 시나리오)
+- 3주차 시작 전: 선행 과제(Ollama 응답 시간 측정)와 결정(FIRING 알림 방식)이 먼저. 5-3 참고
 
 ## 5. 다음 할 일
 
@@ -129,17 +130,22 @@ docker compose stop app; (2분 뒤) docker compose start app                    
    - test_probe_notifier: 타임아웃·타임아웃·성공 순서의 firing 변화 / take_window_flag 기억과 초기화 / UPDATE 메시지 첫 필드와 timestamp ≠ opened_at / Slack payload의 text가 [FIRING]으로 시작, header 블록 없음
 6. ruff 지적 수정(자동 → 수동), pytest 전부 통과, `docker compose up -d --build watcher` 후 start 로그 확인
 
-### 5-2. 2주차 마무리 (지금 할 일)
+### 5-2. 2주차 마무리 (코드·시험·PR 완료, 노션 정리 대기)
 
 - (완료) v0 합격 시험 중 알림 항목 자동화 스크립트: `scripts/acceptance/alerts.py`, errors 시나리오 기본 모드 약 15분 (2분 내 FIRING, 중복 0, 5분 후 RESOLVED). 실측(2026-10-22~23): errors A 44초 B 1건 C 281초 / stop A 17초 B 1건 C 301초
 - (완료) 앱 정지 시나리오 추가: `--scenario stop`으로 R4 프로브 경로 시험 (앱 120초 정지, FIRING 60초 이내, 중복 0, 복구 후 RESOLVED). D(UPDATE 0건)를 포함해 실제로 돈 첫 실측: A 22초 B 1건 C 321초 D 0건 (2026-10-23) (이 실측은 R3 후속 escalate 경로를 지나지 않았음: R3·R4가 같은 창에서 동시에 켜짐). 위상 정렬과 E 도입 후 실측: A 28초 B 1건 C 297초 D 0건 E 예 (2026-10-23)
 - (완료) 설계 그림 갱신 (v0.2, 소스는 `docs/figures/src/`, 재생성은 `python3 docs/figures/src/build.py`): Fig 3(프로브 15초 별도 실행, UPDATE), Fig 4(R3 0.7·중앙값, dedup key = service, UPDATE 유예 180초), Fig 1(UPDATE 알림)
-- 2-C 노션 기록 정리 (아래 6-2 목록)
-- PR 작성·병합, 2주차 학습 노트("Watcher와 탐지 규칙")
+- 2-C 노션 기록 정리: 사용자 확인 대기 (아래 6-2 목록)
+- (완료) PR #3 병합
+- 2주차 학습 노트("Watcher와 탐지 규칙"): 작성됨, 노션 반영은 사용자 확인 대기
 
-### 5-3. 3주차 예고
+### 5-3. 3주차 (지금 할 일)
 
 Ollama 추가(8B 이하), LLM 호출 전 마스킹·최근 50줄 제한, 런북 2~3개(1주차 에러 시그니처 표, 포화 시 다른 에러가 가려지는 현상 포함), 타임아웃 30초·실패 시 기본 템플릿.
+
+- 선행 과제: Ollama를 띄워 8B 이하 모델의 실제 응답 시간을 측정한다(코드 작성 전). VM은 GPU 없이 CPU 8코어일 가능성이 높다.
+- 결정 대기: FIRING 알림은 LLM을 기다리지 않고 즉시 보내고 분석은 후속 메시지로 보낼지 (사용자 결정 전)
+- 보안: LLM 입력 마스킹은 Opus로 설계·구현한다
 
 ### 5-4. 알려진 과제
 
@@ -147,6 +153,7 @@ Ollama 추가(8B 이하), LLM 호출 전 마스킹·최근 50줄 제한, 런북 
 - 아이폰 Termius는 OpenSSH 키 등록 필요
 - 느린 성능 저하 시나리오는 2-4에서 켜고 끌 수 있는 장애 주입으로 구현
 - 포화 중에는 다른 에러 신호가 대기열에 묶였다가 해소 시 희석됨(R1 미탐) → 런북과 LLM 맥락에 반영
+- 남은 빚은 docs/retros/2026-w02-retro.md의 '아직 남은 것' 절 참고
 
 ## 6. 기록 형식 (노션)
 
@@ -158,6 +165,7 @@ Ollama 추가(8B 이하), LLM 호출 전 마스킹·최근 50줄 제한, 런북 
 - 학습 노트(개념 노트): 한 줄 요약 → 쉬운 설명 → 핵심 용어 표 → 심화 설명 → 이 프로젝트에서의 역할 → 실행한 명령어와 결과 → 트러블슈팅·의사결정 → 자주 쓰는 명령어 → 셀프 체크
 - 포스트모템: 요약 → 영향 → 원인 → 탐지 → 해결 → 교훈
 - 표는 항상 최신 항목이 맨 위. 같은 날짜 안에서는 나중에 일어난 일이 위.
+- 매주 끝날 때 docs/retros/YYYY-wNN-retro.md로 회고를 남기고 노션에도 복사한다. 원본은 레포 파일이고, 고칠 때는 레포를 먼저 고친 뒤 노션에 다시 붙인다. 형식은 w02 회고를 따른다.
 
 ### 6-2. 2-C에서 아직 노션에 정리하지 않은 내용
 
