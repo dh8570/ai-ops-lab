@@ -4,13 +4,15 @@
 실행 위치: VM 호스트 (표준 라이브러리만 사용, Docker Compose 필요)
     python3 scripts/acceptance/alerts.py                   # errors: 10분 주입, 약 15분 소요
     python3 scripts/acceptance/alerts.py --quick           # errors: 2분 주입, 빠른 확인용 (B는 참고만)
-    python3 scripts/acceptance/alerts.py --scenario stop   # stop: 앱 2분 정지, 약 9분 소요
+    python3 scripts/acceptance/alerts.py --scenario stop   # stop: 앱 2분 정지, 약 9분 소요 (--quick 불가)
 
 검증 항목
     A  탐지 시간   주입 시작 → 첫 FIRING 알림까지 120초 이내 (stop 시나리오는 60초)
     B  중복 없음   그 장애의 FIRING 알림이 정확히 1건
     C  복구 알림   주입 종료 후 RESOLVED 알림 도착
                    (대기 한도 = 주입 종료 + (resolve_windows + 2) × window_sec)
+    D  UPDATE 없음 (stop 시나리오만) 그 장애의 UPDATE 알림이 0건. 프로브로 연 장애에 R3가 유예(180초) 안에
+                   뒤따라 붙어도 UPDATE가 나가면 안 된다. 2-C에서 고친 버그(75초 뒤 R3가 붙자 UPDATE 발송)의 회귀 시험
 
 시나리오 (--scenario)
     사전 조건(traffic 실행 중, 최근 window가 NORMAL, 기준선 3개 창 이상)을 확인한 뒤 장애를 주입하고
@@ -237,6 +239,10 @@ def judge(result: dict, start: datetime, fault_end: datetime | None, fault_sec: 
     else:
         rows.append(("C", False, f"RESOLVED 알림이 오지 않음 (한도 {limit_c}초)"))
 
+    if scenario == "stop":
+        updates = result["UPDATE"]
+        rows.append(("D", not updates, f"UPDATE 알림 {len(updates)}건 (기대 0건)"))
+
     log()
     log("== 결과 ==")
     overall = True
@@ -259,10 +265,10 @@ def judge(result: dict, start: datetime, fault_end: datetime | None, fault_sec: 
     return 0 if overall else 1
 
 
-def run_stop_scenario(fault_sec: int, window_sec: int, resolve_windows: int, quick: bool) -> int:
+def run_stop_scenario(fault_sec: int, window_sec: int, resolve_windows: int) -> int:
     """앱을 fault_sec 동안 멈췄다가 되살린다. 로그가 끊기므로 R4(합성 프로브) 경로로 장애가 열려야 한다."""
     log(f"시험 시작: 앱 정지 {fault_sec}초 (docker compose stop app → start app), window {window_sec}초, "
-        f"resolve_windows {resolve_windows}{', --quick' if quick else ''}")
+        f"resolve_windows {resolve_windows}")
     signal.signal(signal.SIGTERM, _raise_interrupt)
     start = datetime.now(UTC)                    # 주입 시작 = stop 명령 직전
     try:
@@ -293,7 +299,7 @@ def run_stop_scenario(fault_sec: int, window_sec: int, resolve_windows: int, qui
         restart = compose("start", "app")        # 어떤 경로로 끝나도 앱이 멈춘 채 남지 않게 한다
         if restart.returncode != 0:
             log(f"[경고] app 시작 실패, 직접 실행하세요: docker compose start app ({restart.stderr.strip()[:200]})")
-    return judge(result, start, fault_end, fault_sec, window_sec, resolve_windows, quick,
+    return judge(result, start, fault_end, fault_sec, window_sec, resolve_windows, False,
                  detect_limit=STOP_DETECT_LIMIT_SEC, scenario="stop")
 
 
@@ -304,6 +310,8 @@ def main() -> int:
     ap.add_argument("--fault-sec", type=int, default=None, help="주입(정지) 시간(초), 기본 errors 600 / stop 120")
     ap.add_argument("--quick", action="store_true", help="errors는 주입 120초로 줄인 빠른 확인용. B는 참고로만 표시")
     args = ap.parse_args()
+    if args.scenario == "stop" and args.quick:
+        ap.error("--quick은 errors 시나리오 전용입니다")
     fault_sec = args.fault_sec or (120 if args.quick or args.scenario == "stop" else 600)
 
     window_sec, resolve_windows = load_params()
@@ -315,7 +323,7 @@ def main() -> int:
         return 2
 
     if args.scenario == "stop":
-        return run_stop_scenario(fault_sec, window_sec, resolve_windows, args.quick)
+        return run_stop_scenario(fault_sec, window_sec, resolve_windows)
 
     log(f"시험 시작: 에러 주입 {fault_sec}초 (rps 3, error-rate 1.0), window {window_sec}초, "
         f"resolve_windows {resolve_windows}{', --quick' if args.quick else ''}")
