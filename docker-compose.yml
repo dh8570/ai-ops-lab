@@ -62,7 +62,18 @@ services:
       - app
     restart: unless-stopped
 
+  # 3주차 스파이크: 로컬 LLM 추론 서버. 응답 시간 측정용이라 기본 up에는 포함하지 않는다.
+  ollama:
+    image: ollama/ollama:0.40.2           # 태그 고정(latest 금지). 2026-10-08 배포, 선정 시점에 14일 이상 지난 최신 안정 태그
+    profiles: ["llm"]                      # `docker compose --profile llm up -d ollama`로 켤 때만 시작
+    init: true                             # PID 1이 시그널을 전달하고 좀비 프로세스를 거둔다 (docker stop 때 정상 종료)
+    restart: "no"                          # 측정용이라 죽어도 자동 재시작하지 않는다
+    volumes:
+      - ollama-models:/root/.ollama        # 모델 가중치를 컨테이너 밖 볼륨에 보관해 컨테이너를 지워도 다시 받지 않는다
+    # ports는 일부러 두지 않는다. 호스트에 게시하지 않고 같은 compose 네트워크의 http://ollama:11434로만 접근한다.
+
 volumes:
   db-data:
   app-logs:
   watcher-state:
+  ollama-models:

@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# 3주차 LLM 응답 시간 스파이크: 원시 측정 결과(프롬프트, 응답 본문 포함)는 레포에 올리지 않는다
+scripts/spikes/llm-latency/out/
