@@ -98,3 +98,111 @@ def test_to_slack_firing_shape():
     assert payload["text"].startswith("[FIRING]")
     block_types = [b["type"] for b in payload["attachments"][0]["blocks"]]
     assert "header" not in block_types
+
+
+# ---- 알림 실패 기록 (notify_failed) ----
+WEBHOOK = "https://hooks.example.test/services/T000/B000/SECRET"
+
+
+def _send_with(monkeypatch, fake_urlopen):
+    import json as _json
+
+    from notifier import Notifier
+    records = []
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    n = Notifier("slack", WEBHOOK, lambda event, **kw: records.append({"event": event, **kw}))
+    ok = n.send("FIRING", _incident())
+    return ok, records, _json.dumps(records)
+
+
+def _incident():
+    return Incident(id=1, service="app", state="FIRING", severity="critical", rules=["R1"],
+                    opened_at="2026-10-26T00:00:00+00:00", resolved_at=None, fire_windows=1, quiet_windows=0)
+
+
+# DNS 실패 3번 → attempts 3개, 각 항목에 예외 종류와 메시지
+def test_notify_failed_records_each_attempt(monkeypatch):
+    import socket
+    import urllib.error
+
+    def fake_urlopen(req, timeout=0):
+        raise urllib.error.URLError(socket.gaierror(-3, "Temporary failure in name resolution"))
+
+    ok, records, _ = _send_with(monkeypatch, fake_urlopen)
+    assert ok is False
+    failed = [r for r in records if r["event"] == "notify_failed"]
+    assert len(failed) == 1
+    assert failed[0]["error"] == "URLError"
+    assert "total_sec" in failed[0]
+    assert len(failed[0]["attempts"]) == 3
+    for i, a in enumerate(failed[0]["attempts"], start=1):
+        assert a["n"] == i
+        assert a["kind"] == "gaierror"
+        assert "name resolution" in a["reason"]
+        assert isinstance(a["sec"], float)
+
+
+# 예외 메시지에 웹훅 주소가 들어 있어도 기록 어디에도 남지 않는다
+def test_notify_failed_never_contains_webhook(monkeypatch):
+    def fake_urlopen(req, timeout=0):
+        raise OSError(f"cannot connect to {WEBHOOK}")
+
+    ok, records, dumped = _send_with(monkeypatch, fake_urlopen)
+    assert ok is False
+    assert WEBHOOK not in dumped
+    assert "SECRET" not in dumped
+    assert "<webhook>" in dumped
+
+
+# 성공하면 notify_failed 는 emit 되지 않는다
+def test_notify_success_emits_no_failure(monkeypatch):
+    ok, records, _ = _send_with(monkeypatch, lambda req, timeout=0: _FakeResponse(200))
+    assert ok is True
+    assert [r["event"] for r in records] == ["notified"]
+
+
+def _http_error(code, body=b"", headers=None):
+    import io
+    import urllib.error
+    from email.message import Message
+    hdrs = Message()
+    for k, v in (headers or {}).items():
+        hdrs[k] = v
+    return urllib.error.HTTPError(WEBHOOK, code, "msg", hdrs, io.BytesIO(body))
+
+
+# 첫 시도 429(Retry-After: 2) → 2초 대기 후 두 번째 시도 성공
+def test_notify_429_waits_retry_after_then_succeeds(monkeypatch):
+    import json as _json
+
+    from notifier import Notifier
+    seq = iter([_http_error(429, b"{}", {"Retry-After": "2"}), _FakeResponse(200)])
+    sleeps, records = [], []
+
+    def fake_urlopen(req, timeout=0):
+        item = next(seq)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    monkeypatch.setattr("time.sleep", sleeps.append)
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    n = Notifier("slack", WEBHOOK, lambda event, **kw: records.append({"event": event, **kw}))
+    assert n.send("FIRING", _incident()) is True
+    assert sleeps == [2.0]
+    assert [r["event"] for r in records] == ["notified"]
+    assert WEBHOOK not in _json.dumps(records)
+
+
+# 500 세 번 → notify_failed 한 번, error 는 "HTTP 500", 시도 kind 는 모두 HTTPError
+def test_notify_http_500_three_times_records_httperror(monkeypatch):
+    def fake_urlopen(req, timeout=0):
+        raise _http_error(500, b"server exploded")
+
+    ok, records, _ = _send_with(monkeypatch, fake_urlopen)
+    assert ok is False
+    failed = [r for r in records if r["event"] == "notify_failed"]
+    assert len(failed) == 1
+    assert failed[0]["error"].startswith("HTTP 500")
+    assert [a["kind"] for a in failed[0]["attempts"]] == ["HTTPError"] * 3

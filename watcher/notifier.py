@@ -86,23 +86,41 @@ class Notifier:
             return True
 
         last_error = None
+        attempts = []                                                      # 시도별 실패 기록 (원인 추적용)
+        started = time.monotonic()
         for attempt in range(3):
+            t0 = time.monotonic()
             try:
                 req = urllib.request.Request(
                     self.url, data=json.dumps(payload).encode(), method="POST",
                     headers={"Content-Type": "application/json", "User-Agent": "ai-ops-lab-watcher/0.2"})
+                t0 = time.monotonic()                                      # urlopen 직전부터 잰다
                 with urllib.request.urlopen(req, timeout=5) as res:
                     self.emit("notified", provider=self.provider, kind=kind, incident_id=inc.id, status=res.status)
                     return True
             except urllib.error.HTTPError as e:
                 body = e.read().decode(errors="replace")[:200]
-                last_error = f"HTTP {e.code} {body}"
+                last_error = self._scrub(f"HTTP {e.code} {body}", 200)
+                attempts.append(self._attempt(attempt, "HTTPError", f"HTTP {e.code} {body}", t0))
                 if e.code == 429:                                          # 속도 제한: 알려준 시간만큼 대기
                     retry = e.headers.get("Retry-After") or json.loads(body or "{}").get("retry_after", 1)
                     time.sleep(min(float(retry), 10))
                     continue
+            except urllib.error.URLError as e:                             # 실제 원인은 e.reason
+                last_error = type(e).__name__
+                attempts.append(self._attempt(attempt, type(e.reason).__name__, str(e.reason), t0))
             except Exception as e:
                 last_error = type(e).__name__
+                attempts.append(self._attempt(attempt, type(e).__name__, str(e), t0))
             time.sleep(2 ** attempt)
-        self.emit("notify_failed", provider=self.provider, kind=kind, incident_id=inc.id, error=last_error)
+        self.emit("notify_failed", provider=self.provider, kind=kind, incident_id=inc.id, error=last_error,
+                  attempts=attempts, total_sec=round(time.monotonic() - started, 1))
         return False
+
+    def _scrub(self, text: str, limit: int) -> str:
+        """기록에 웹훅 주소가 남지 않게 치환한 뒤 limit자까지 자른다."""
+        return text.replace(self.url, "<webhook>")[:limit]
+
+    def _attempt(self, attempt: int, kind: str, reason: str, t0: float) -> dict:
+        return {"n": attempt + 1, "kind": kind, "reason": self._scrub(reason, 150),
+                "sec": round(time.monotonic() - t0, 1)}
