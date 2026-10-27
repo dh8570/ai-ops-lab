@@ -252,26 +252,53 @@ def test_send_429_with_http_date_retry_after(monkeypatch):
     assert WEBHOOK not in dumped
 
 
-# e.read() 가 시간 초과 → 예외 없이 False, notify_failed 가 emit 된다
-def test_send_http_error_body_read_timeout(monkeypatch):
+class _BrokenBody:
+    def read(self, *args):
+        raise TimeoutError("read timed out")
+
+    def close(self):
+        pass
+
+
+def _http_error_broken_body(code):
     import urllib.error
     from email.message import Message
+    return urllib.error.HTTPError(WEBHOOK, code, "msg", Message(), _BrokenBody())
 
-    class _BrokenBody:
-        def read(self, *args):
-            raise TimeoutError("read timed out")
 
-        def close(self):
-            pass
+# e.read() 가 시간 초과여도 세 번 재시도하고 attempts 가 남는다
+def test_send_http_error_body_read_timeout(monkeypatch):
+    calls = []
 
     def fake_urlopen(req, timeout=0):
-        raise urllib.error.HTTPError(WEBHOOK, 500, "msg", Message(), _BrokenBody())
+        calls.append(1)
+        raise _http_error_broken_body(500)
 
     ok, records, _, dumped = _send_with_sleeps(monkeypatch, fake_urlopen)
     assert ok is False
+    assert len(calls) == 3
     failed = [r for r in records if r["event"] == "notify_failed"]
     assert len(failed) == 1
-    assert failed[0]["error"] == "internal:TimeoutError"
+    assert failed[0]["error"].startswith("HTTP 500")
+    assert [a["kind"] for a in failed[0]["attempts"]] == ["HTTPError"] * 3
+    assert all(a["reason"].endswith("(본문 읽기 실패: TimeoutError)") for a in failed[0]["attempts"])
+    assert "total_sec" in failed[0]
+    assert WEBHOOK not in dumped
+
+
+# 첫 시도는 500 + 본문 읽기 시간 초과, 두 번째 시도는 성공
+def test_send_body_read_timeout_then_success(monkeypatch):
+    seq = iter([_http_error_broken_body(500), _FakeResponse(200)])
+
+    def fake_urlopen(req, timeout=0):
+        item = next(seq)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    ok, records, _, dumped = _send_with_sleeps(monkeypatch, fake_urlopen)
+    assert ok is True
+    assert [r["event"] for r in records] == ["notified"]
     assert WEBHOOK not in dumped
 
 

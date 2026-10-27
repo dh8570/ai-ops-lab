@@ -110,9 +110,13 @@ class Notifier:
                     self.emit("notified", provider=self.provider, kind=kind, incident_id=inc.id, status=res.status)
                     return True
             except urllib.error.HTTPError as e:
-                body = e.read().decode(errors="replace")[:200]
+                note = ""
+                try:
+                    body = e.read().decode(errors="replace")[:200]
+                except Exception as read_err:                              # 본문을 못 읽어도 재시도·기록은 이어간다
+                    body, note = "", f" (본문 읽기 실패: {type(read_err).__name__})"
                 last_error = self._scrub(f"HTTP {e.code} {body}", 200)
-                attempts.append(self._attempt(attempt, "HTTPError", f"HTTP {e.code} {body}", t0))
+                attempts.append(self._attempt(attempt, "HTTPError", f"HTTP {e.code} {body}", t0, note))
                 if e.code == 429:                                          # 속도 제한: 알려준 시간만큼 대기
                     time.sleep(self._retry_wait(e.headers.get("Retry-After"), body))
                     continue
@@ -157,6 +161,6 @@ class Notifier:
                 text = text.replace(path, "<webhook>")
         return text[:limit]
 
-    def _attempt(self, attempt: int, kind: str, reason: str, t0: float) -> dict:
-        return {"n": attempt + 1, "kind": kind, "reason": self._scrub(reason, 150),
+    def _attempt(self, attempt: int, kind: str, reason: str, t0: float, note: str = "") -> dict:
+        return {"n": attempt + 1, "kind": kind, "reason": self._scrub(reason, 150) + note,
                 "sec": round(time.monotonic() - t0, 1)}
