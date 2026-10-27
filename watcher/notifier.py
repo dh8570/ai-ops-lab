@@ -1,6 +1,8 @@
 import json
+import math
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -80,29 +82,85 @@ class Notifier:
         self.provider, self.url, self.emit = provider, webhook_url, emit
 
     def send(self, kind: str, inc, **ctx) -> bool:
+        """어떤 경우에도 예외를 밖으로 내보내지 않는다. 감시 루프가 죽으면 이미 저장된 장애의 FIRING 알림이 사라진다."""
+        try:
+            return self._send_inner(kind, inc, **ctx)
+        except Exception as e:
+            self.emit("notify_failed", provider=self.provider, kind=kind, incident_id=inc.id,
+                      error=f"internal:{type(e).__name__}", reason=self._scrub(str(e), 150))
+            return False
+
+    def _send_inner(self, kind: str, inc, **ctx) -> bool:
         payload = FORMATTERS[self.provider](build_message(kind, inc, **ctx))
         if not self.url:
             self.emit("notify_dryrun", provider=self.provider, kind=kind, incident_id=inc.id, payload=payload)
             return True
 
         last_error = None
+        attempts = []                                                      # 시도별 실패 기록 (원인 추적용)
+        started = time.monotonic()
         for attempt in range(3):
+            t0 = time.monotonic()
             try:
                 req = urllib.request.Request(
                     self.url, data=json.dumps(payload).encode(), method="POST",
                     headers={"Content-Type": "application/json", "User-Agent": "ai-ops-lab-watcher/0.2"})
+                t0 = time.monotonic()                                      # urlopen 직전부터 잰다
                 with urllib.request.urlopen(req, timeout=5) as res:
                     self.emit("notified", provider=self.provider, kind=kind, incident_id=inc.id, status=res.status)
                     return True
             except urllib.error.HTTPError as e:
-                body = e.read().decode(errors="replace")[:200]
-                last_error = f"HTTP {e.code} {body}"
+                note = ""
+                try:
+                    body = e.read().decode(errors="replace")[:200]
+                except Exception as read_err:                              # 본문을 못 읽어도 재시도·기록은 이어간다
+                    body, note = "", f" (본문 읽기 실패: {type(read_err).__name__})"
+                last_error = self._scrub(f"HTTP {e.code} {body}", 200)
+                attempts.append(self._attempt(attempt, "HTTPError", f"HTTP {e.code} {body}", t0, note))
                 if e.code == 429:                                          # 속도 제한: 알려준 시간만큼 대기
-                    retry = e.headers.get("Retry-After") or json.loads(body or "{}").get("retry_after", 1)
-                    time.sleep(min(float(retry), 10))
+                    time.sleep(self._retry_wait(e.headers.get("Retry-After"), body))
                     continue
+            except urllib.error.URLError as e:                             # 실제 원인은 e.reason
+                last_error = type(e).__name__
+                attempts.append(self._attempt(attempt, type(e.reason).__name__, str(e.reason), t0))
             except Exception as e:
                 last_error = type(e).__name__
+                attempts.append(self._attempt(attempt, type(e).__name__, str(e), t0))
             time.sleep(2 ** attempt)
-        self.emit("notify_failed", provider=self.provider, kind=kind, incident_id=inc.id, error=last_error)
+        self.emit("notify_failed", provider=self.provider, kind=kind, incident_id=inc.id, error=last_error,
+                  attempts=attempts, total_sec=round(time.monotonic() - started, 1))
         return False
+
+    @staticmethod
+    def _retry_wait(header, body: str) -> float:
+        """429 대기 시간(초). Retry-After 숫자 → 본문 retry_after 숫자 → 1초. 최대 10초, 예외를 내지 않는다."""
+        def number(v):
+            try:
+                if isinstance(v, bool):
+                    return None
+                f = float(v)
+            except (TypeError, ValueError):
+                return None
+            return f if math.isfinite(f) and f >= 0 else None
+
+        wait = number(header)
+        if wait is None:
+            try:
+                data = json.loads(body or "{}")
+                wait = number(data.get("retry_after")) if isinstance(data, dict) else None
+            except ValueError:
+                wait = None
+        return min(wait if wait is not None else 1.0, 10.0)
+
+    def _scrub(self, text: str, limit: int) -> str:
+        """기록에 웹훅 주소(전체와 path)가 남지 않게 치환한 뒤 limit자까지 자른다."""
+        if self.url:
+            text = text.replace(self.url, "<webhook>")
+            path = urllib.parse.urlparse(self.url).path
+            if len(path) >= 8:                                             # 짧은 path는 엉뚱한 곳이 바뀐다
+                text = text.replace(path, "<webhook>")
+        return text[:limit]
+
+    def _attempt(self, attempt: int, kind: str, reason: str, t0: float, note: str = "") -> dict:
+        return {"n": attempt + 1, "kind": kind, "reason": self._scrub(reason, 150) + note,
+                "sec": round(time.monotonic() - t0, 1)}
