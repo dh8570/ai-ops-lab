@@ -1,25 +1,29 @@
 # 프로젝트 인수인계 문서 (PROJECT_CONTEXT)
 
-최종 갱신: 2026-10-22 · 작성 배경: claude.ai 대화에서 진행하던 프로젝트를 Claude Code로 이어가기 위한 맥락 정리
+최종 갱신: 2026-10-27 · 작성 배경: claude.ai 대화에서 진행하던 프로젝트를 Claude Code로 이어가기 위한 맥락 정리
 
 ---
 
 ## 1. 목표와 진행 방식
 
-- 목표: AI·AX, AIOps, 인프라를 엮은 "LLM 기반 장애 분석 어시스턴트"를 만들고, 그 과정을 실무 수준으로 설명할 수 있게 되는 것. 비용 0원 원칙.
-- 방식: **워킹 스켈레톤**. 1~3주차에 가장 단순한 방법으로 전체 흐름(앱 → 로그 → 감지 → LLM 요약 → 알림)을 끝까지 연결하고, 4~21주차에 부품을 하나씩 실무 기술로 교체(ELK, Ansible, Prometheus, Isolation Forest, RAG, Airflow, 에이전트, Terraform·OCI). 22~24주차 시연·포트폴리오.
-- 설계 그림: `docs/figures/` (Fig 1~4는 v0.1, Fig 5는 v0). 2주차 결정 일부가 아직 그림에 반영되지 않음(아래 "남은 일" 참고).
+- 목적: "LLM 기반 장애 분석 어시스턴트"를 만들며 어떤 문제를 AI로 푸는지, AI가 어떻게 동작하는지, 데이터를 어디에 저장해 어떻게 쓰는지를 배운다. 4주(2026-10-27 ~ 11-23). 비용 0원 원칙.
+- 원칙: AI 우선(인프라는 AI 단계를 막을 때만 최소로), 매주 "AI 질문 세 가지"와 채점표·비교표 1개 이상, 모르는 것은 질문하며 배운다(용어는 docs/glossary.md).
+- 계획과 주별 상세는 `docs/plan/ai-first-4weeks.md`가 유일한 원본이다.
+- (구버전) 24주 로드맵(워킹 스켈레톤 후 ELK·Ansible·Prometheus·Airflow·Terraform·OCI 등으로 교체)은 2026-10-27에 4주 AI 우선 계획으로 대체했다.
+- 설계 그림: `docs/figures/` (Fig 1·3·4는 2주차에 v0.2로 갱신, Fig 5는 구버전이라 D주에 다시 그린다).
 
 ## 2. 환경
 
 | 구성 | 내용 |
 | --- | --- |
-| 물리 서버 jn-controller1 | Ubuntu 26.04, 업무 서비스 컨테이너 공존. VM 관리만 한다. 코드·키를 두지 않는다 |
-| VM ai-lab (Multipass) | Ubuntu 24.04, 8 vCPU / 32GB / 150GB. 모든 실습 공간. 사용자 `ubuntu` |
-| 접속 | Tailscale(tailnet) + **표준 OpenSSH**. ai-lab Tailscale IP `100.84.255.38`. Tailscale SSH는 끔(2주차 결정) |
+| 물리 서버 controller1 | Ubuntu 26.04.1, 논리 CPU 48개, 메모리 251GB, 디스크 1.8TB, GPU RTX 4080 16GB(드라이버 595-open). 기존 업무 서비스는 꺼 둠. 서버에서의 명령 실행은 사용자가 직접 한다 |
+| VM ai-lab-gpu (Multipass) | Ubuntu 24.04, 8코어 / 32GB / 100GB. 모든 실습 공간. 사용자 `ubuntu`. Multipass 1.17.0(업데이트 보류), 스냅샷 `docker-ready`. GPU는 서버에만 있고 VM에는 없다 |
+| VM↔서버 통로 | 10.97.0.0/24, 서버 쪽 10.97.0.1. Ollama는 서버에서 돌고 이 주소(10.97.0.1:11434)에만 공개 예정 |
+| 접속 | Tailscale + **표준 OpenSSH**. Tailscale은 `--ssh` 없이 쓴다(Tailscale SSH는 끔, 2주차 결정) |
 | 개발 도구 | Windows의 VS Code / Cursor Remote-SSH, Claude Code |
 | 알림 | Slack `#alerts` (Incoming Webhook, `.env`의 `NOTIFY_WEBHOOK_URL`) |
-| 비상 접속 | 물리 서버에서 `multipass shell ai-lab` |
+| 비상 접속 | 서버에서 `multipass shell ai-lab-gpu` |
+| 옛 환경 | jn-controller1 위 VM ai-lab (서비스 중지, 보관). 옛 CPU 측정 결과 압축본은 옛 VM 홈의 `llm-latency-out-20261026.tgz`, 측정 스크립트 초안은 `feat/3-llm` 브랜치(wip) |
 
 ## 3. 레포와 서비스 구성
 
@@ -107,9 +111,13 @@ docker compose stop app; (2분 뒤) docker compose start app                    
   - 2-A 완료: 로그 집계, R1~R3, 중앙값 기준선, 배경 트래픽
   - 2-B 완료: 상태 머신, SQLite, Slack 알림, SIGTERM, 경과 시간 보정, app `count(*)` 제거
   - 2-C 완료: R4 프로브, UPDATE 알림(180초 유예), policy 분리, 단위 테스트 29개, ruff·pytest 검사 스크립트, 알림 합격 시험 자동화(errors·stop 시나리오)
-- 3주차 시작 전: 선행 과제(Ollama 응답 시간 측정)와 결정(FIRING 알림 방식)이 먼저. 5-3 참고
+- 새 서버(controller1 위 ai-lab-gpu)로 이전 완료 (합격 시험 통과)
+- 알림 실패 원인 기록 보강 (PR #5 병합)
+- **현재: A주 시작** (2026-10-27). 세부는 `docs/plan/ai-first-4weeks.md`
 
 ## 5. 다음 할 일
+
+**지금 할 일: A주. 세부는 `docs/plan/ai-first-4weeks.md`.** 아래 5-1~5-3은 지난 계획의 기록이다.
 
 ### 5-1. 2-C: 단위 테스트와 린터 (완료)
 
@@ -139,7 +147,7 @@ docker compose stop app; (2분 뒤) docker compose start app                    
 - (완료) PR #3 병합
 - 2주차 학습 노트("Watcher와 탐지 규칙"): 작성됨, 노션 반영은 사용자 확인 대기
 
-### 5-3. 3주차 (지금 할 일)
+### 5-3. 3주차 (구계획, A주 계획으로 대체)
 
 Ollama 추가(8B 이하), LLM 호출 전 마스킹·최근 50줄 제한, 런북 2~3개(1주차 에러 시그니처 표, 포화 시 다른 에러가 가려지는 현상 포함), 타임아웃 30초·실패 시 기본 템플릿.
 
@@ -154,6 +162,10 @@ Ollama 추가(8B 이하), LLM 호출 전 마스킹·최근 50줄 제한, 런북 
 - 느린 성능 저하 시나리오는 2-4에서 켜고 끌 수 있는 장애 주입으로 구현
 - 포화 중에는 다른 에러 신호가 대기열에 묶였다가 해소 시 희석됨(R1 미탐) → 런북과 LLM 맥락에 반영
 - 남은 빚은 docs/retros/2026-w02-retro.md의 '아직 남은 것' 절 참고
+- Slack 알림 간헐 실패: 원인 미확인. 재발하면 `notify_failed`의 attempts 기록으로 조사
+- app 컨테이너와 이미지 이름표 불일치: 내용은 같을 것으로 추정. 다음 재생성 때 합격 시험으로 확인
+- 서버 root 비밀번호 SSH 허용: 정리 과제
+- 설계 그림 Fig 5는 구버전: D주에 다시 그린다
 
 ## 6. 기록 형식 (노션)
 
