@@ -206,3 +206,83 @@ def test_notify_http_500_three_times_records_httperror(monkeypatch):
     assert len(failed) == 1
     assert failed[0]["error"].startswith("HTTP 500")
     assert [a["kind"] for a in failed[0]["attempts"]] == ["HTTPError"] * 3
+
+
+# ---- send() 는 예외를 밖으로 내보내지 않는다 ----
+WEBHOOK_PATH = "/services/T000/B000/SECRET"
+
+
+def _send_with_sleeps(monkeypatch, fake_urlopen):
+    import json as _json
+
+    from notifier import Notifier
+    sleeps, records = [], []
+    monkeypatch.setattr("time.sleep", sleeps.append)
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    n = Notifier("slack", WEBHOOK, lambda event, **kw: records.append({"event": event, **kw}))
+    ok = n.send("FIRING", _incident())
+    return ok, records, sleeps, _json.dumps(records)
+
+
+# 429 + Retry-After 없음 + 본문이 JSON 아님 → 1초씩 대기하고 세 번 뒤 False
+def test_send_429_without_retry_after_and_non_json_body(monkeypatch):
+    def fake_urlopen(req, timeout=0):
+        raise _http_error(429, b"not json")
+
+    ok, records, sleeps, dumped = _send_with_sleeps(monkeypatch, fake_urlopen)
+    assert ok is False
+    assert [r["event"] for r in records] == ["notify_failed"]
+    assert sleeps == [1.0, 1.0, 1.0]
+    assert WEBHOOK not in dumped
+
+
+# Retry-After 가 날짜 형식 → 해석 불가이므로 1초 대기 후 재시도
+def test_send_429_with_http_date_retry_after(monkeypatch):
+    seq = iter([_http_error(429, b"", {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}), _FakeResponse(200)])
+
+    def fake_urlopen(req, timeout=0):
+        item = next(seq)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    ok, records, sleeps, dumped = _send_with_sleeps(monkeypatch, fake_urlopen)
+    assert ok is True
+    assert sleeps == [1.0]
+    assert WEBHOOK not in dumped
+
+
+# e.read() 가 시간 초과 → 예외 없이 False, notify_failed 가 emit 된다
+def test_send_http_error_body_read_timeout(monkeypatch):
+    import urllib.error
+    from email.message import Message
+
+    class _BrokenBody:
+        def read(self, *args):
+            raise TimeoutError("read timed out")
+
+        def close(self):
+            pass
+
+    def fake_urlopen(req, timeout=0):
+        raise urllib.error.HTTPError(WEBHOOK, 500, "msg", Message(), _BrokenBody())
+
+    ok, records, _, dumped = _send_with_sleeps(monkeypatch, fake_urlopen)
+    assert ok is False
+    failed = [r for r in records if r["event"] == "notify_failed"]
+    assert len(failed) == 1
+    assert failed[0]["error"] == "internal:TimeoutError"
+    assert WEBHOOK not in dumped
+
+
+# 예외 메시지에 웹훅 path 만 들어 있어도 기록 어디에도 남지 않는다
+def test_send_scrubs_webhook_path_only(monkeypatch):
+    def fake_urlopen(req, timeout=0):
+        raise OSError(f"bad request target {WEBHOOK_PATH}")
+
+    ok, records, _, dumped = _send_with_sleeps(monkeypatch, fake_urlopen)
+    assert ok is False
+    assert WEBHOOK_PATH not in dumped
+    assert "SECRET" not in dumped
+    assert WEBHOOK not in dumped
+    assert "<webhook>" in dumped
