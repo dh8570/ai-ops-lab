@@ -62,7 +62,25 @@ services:
       - app
     restart: unless-stopped
 
+  # 파이프라인 탐험 사이트 S0 (문장 -> 토큰화 -> 읽기·쓰기 -> 복원). 기본 up에는 포함되지 않는다(profile).
+  #   실행: docker compose --profile explorer up -d --build explorer
+  explorer:
+    build: ./explorer
+    init: true                      # PID 1이 신호 전달·좀비 정리를 맡게 한다
+    profiles: ["explorer"]          # --profile explorer를 줄 때만 뜬다
+    restart: "no"                   # 자동 재시작 없음(학습용 도구)
+    user: "10004"                   # 비root. Dockerfile의 explorer 사용자와 같은 uid
+    environment:
+      OLLAMA_URL: http://10.97.0.1:11434   # 서버 설정값. 화면에서 바꿀 수 없다
+      TRACE_PATH: /data/traces.jsonl       # 요청 기록(한 요청에 한 줄)
+    volumes:
+      - explorer-traces:/data
+    ports:
+      # tailnet 주소(APP_BIND_IP)에만 연다. 값이 비어 있으면 0.0.0.0으로 열리는 사고를 막기 위해 실행 자체를 거부한다.
+      - "${APP_BIND_IP:?APP_BIND_IP가 비어 있습니다(.env 확인)}:8100:8100"
+
 volumes:
   db-data:
   app-logs:
   watcher-state:
+  explorer-traces:
