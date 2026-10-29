@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # microscope/ 정적 검사와 시험을 실행한다.
-#   scripts/check-microscope.sh          ruff check + 모델 없는 시험(V6 연산, V7 저장 형식). 수 초
-#   scripts/check-microscope.sh --model  위에 더해 모델 시험(V0 토큰화, V1 층 float32, V2~V4 HF 비교, V5 재현성). 수 분
+#   scripts/check-microscope.sh          ruff check + 모델 없는 시험(V6 연산, V7 저장 형식, V11 뽑기). 수 초
+#   scripts/check-microscope.sh --model  위에 더해 모델 시험(V0 토큰화, V1 층 float32, V2~V4 Prefill HF 비교, V5 재현성,
+#                                        V8~V10 Decode HF 비교, V12 결정성, V13 첫 토큰). 수 분
 #   scripts/check-microscope.sh fix      ruff 자동 수정
 # 주의: 이 스크립트는 레포 밖 경로를 쓴다.
 #   - 가상환경: $MICROSCOPE_VENV (기본 $HOME/microscope-spike/venv). torch·transformers·pytest·ruff가 여기 있다.

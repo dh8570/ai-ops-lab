@@ -69,7 +69,8 @@ def test_names_unique_and_mlp_not_stored(run_dir):
     assert len(names) == len(set(names))
     assert not any("mlp." in n for n in names)
     s = m["mlp_summary"][0]
-    assert set(s) == {"layer", "gate", "up", "act", "act_top8"}
+    assert set(s) == {"step", "layer", "gate", "up", "act", "act_top8"}       # M2-b: step 필드 추가(Prefill은 null)
+    assert s["step"] is None
     assert len(s["act_top8"]) == 5 and all(len(row) == capture.TOPK_PER_TOKEN for row in s["act_top8"])
 
 
@@ -102,3 +103,69 @@ def test_run_id_format():
 def test_manifest_is_json(run_dir):
     d, _ = run_dir
     assert json.loads((d / "manifest.json").read_text())["timing"]["capture_write_s"] >= 0
+
+
+def two_phase_run(tmp_path):
+    """Prefill(T=3) + Decode 2단계를 흉내 낸 가짜 기록."""
+    torch.manual_seed(2)
+    pre = capture.Recorder("prefill")
+    pre("k", 0, torch.randn(2, 3, 4).to(torch.bfloat16))
+    pre("v", 0, torch.randn(2, 3, 4).to(torch.bfloat16))
+    steps = []
+    for j in (1, 2):
+        r = capture.Recorder("decode", step=j)
+        r("k", 0, torch.randn(2, 1, 4).to(torch.bfloat16))
+        r("v", 0, torch.randn(2, 1, 4).to(torch.bfloat16))
+        r("attn", 0, torch.rand(3, 1, 3 + j).to(torch.bfloat16))
+        r("mlp.act", 0, torch.randn(1, 16).to(torch.bfloat16))
+        r("logits_last_f32", None, torch.randn(7))
+        steps.append(r)
+    d = tmp_path / "r-two"
+    capture.write_run(d, {"schema_version": 0}, [pre, *steps])
+    return d, pre, steps
+
+
+def test_decode_file_offsets_and_names(tmp_path):
+    d, _, _ = two_phase_run(tmp_path)
+    m = capture.load_manifest(d)
+    names = [e["name"] for e in m["tensors"]]
+    assert len(names) == len(set(names))
+    assert "D2.L0.attn" in names and "D1.logits_last_f32" in names
+    for fname in capture.BIN_FILES.values():
+        es = [e for e in m["tensors"] if e["file"] == fname]
+        pos = 0
+        for e in es:
+            assert e["offset"] == pos
+            pos += e["nbytes"]
+        assert pos == (d / fname).stat().st_size
+    e = next(x for x in m["tensors"] if x["name"] == "D2.L0.attn")
+    assert e["phase"] == "decode" and e["step"] == 2 and e["layer"] == 0 and e["shape"] == [3, 1, 5]
+    assert next(x for x in m["tensors"] if x["name"] == "D1.logits_last_f32")["layer"] is None
+    assert [s["step"] for s in m["mlp_summary"]] == [1, 2]
+
+
+def test_read_kv_cache(tmp_path):
+    d, pre, steps = two_phase_run(tmp_path)
+    k, v = capture.read_kv_cache(d, 0, 2)
+    want_k = torch.cat([pre.tensors["L0.k"][1], steps[0].tensors["D1.L0.k"][1], steps[1].tensors["D2.L0.k"][1]], 1)
+    assert k.shape == (2, 5, 4) and np.array_equal(k, want_k.float().numpy())
+    k0, _ = capture.read_kv_cache(d, 0, 0)
+    assert k0.shape == (2, 3, 4)
+
+
+def test_old_manifest_without_file_field(run_dir):
+    """M2-a 기록(file 필드 없음)도 prefill.bin으로 읽는다."""
+    d, rec = run_dir
+    m = capture.load_manifest(d)
+    for e in m["tensors"]:
+        e.pop("file")
+    (d / "manifest.json").write_text(json.dumps(m))
+    t = rec.tensors["L0.q"][1].to(torch.float32).numpy()
+    assert np.array_equal(capture.read_tensor(d, "L0.q"), t)
+
+
+def test_recorder_phase_step_mismatch():
+    with pytest.raises(ValueError):
+        capture.Recorder("decode")
+    with pytest.raises(ValueError):
+        capture.Recorder("prefill", step=1)

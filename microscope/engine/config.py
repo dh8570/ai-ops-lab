@@ -61,6 +61,13 @@ def load_config(path: Path | None = None) -> ModelConfig:
     )
 
 
+def eos_token_ids(path: Path | None = None) -> list[int]:
+    """중단 토큰 번호. generation_config.json의 eos_token_id(정수 하나 또는 목록)를 읽는다."""
+    d = json.loads(((path or model_dir()) / "generation_config.json").read_text())
+    e = d["eos_token_id"]
+    return [int(x) for x in (e if isinstance(e, list) else [e])]
+
+
 def revision(path: Path | None = None) -> str:
     f = (path or model_dir()) / "REVISION.txt"
     return f.read_text().strip() if f.exists() else "unknown"

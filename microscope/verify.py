@@ -1,4 +1,5 @@
-"""V2~V4: 캡처 폴더의 값과 HF eager(bf16)를 비교해 그 폴더에 verification_prefill.json을 쓴다.
+"""V2~V4(Prefill)와 V8~V10(Decode): 캡처 폴더의 값과 HF eager(bf16)를 비교해
+그 폴더에 verification_prefill.json과 (Decode가 있으면) verification_decode.json을 쓴다.
 
 사용: python -m microscope.verify --run ~/microscope-runs/<run_id> [--limit-min 40]
 우리 엔진은 올리지 않는다(캡처 파일만 읽는다). 메모리에는 HF 모델 하나만 있다.
@@ -11,7 +12,7 @@ from pathlib import Path
 import torch
 from transformers import AutoTokenizer
 
-from . import hf_ref
+from . import hf_ref, verify_decode
 from .engine import capture, config, guard, model
 
 
@@ -30,6 +31,15 @@ def verify_run(run_dir: Path) -> dict:
 
     hf = hf_ref.load_hf(torch.bfloat16)
     ref = hf_ref.hf_prefill(hf, ids)
+    dec = None
+    if man.get("generated"):
+        dec = verify_decode.hf_loop_compare(hf, run_dir, man)
+        dec.update(verify_decode.hf_generate_compare(hf, man))
+        dec["info_f32_vs_bf16_greedy_differs"] = verify_decode.f32_vs_bf16_greedy(man)
+        dec.update({"run_id": man["run_id"], "logits_path": man["generation"]["logits_path"],
+                    "sampling": man["generation"]["sampling"], "threads": torch.get_num_threads(),
+                    "reference": "transformers Qwen2ForCausalLM, attn_implementation=eager, bf16, DynamicCache"})
+        (run_dir / "verification_decode.json").write_text(json.dumps(dec, ensure_ascii=False, indent=1))
     del hf
     gc.collect()
     tok = AutoTokenizer.from_pretrained(str(config.model_dir()))
@@ -65,7 +75,11 @@ def verify_run(run_dir: Path) -> dict:
         "v4_attn": v4,
         "memory": {"rss_peak_gib": guard.proc_mem_gib()["VmHWM"]},
     }
+    res["all_bit_equal"] = (all(r["bit_equal"] for r in v2) and all(r["k"]["bit_equal"] and r["v"]["bit_equal"]
+                                                                     for r in v3)
+                            and all(r["bit_equal"] for r in v4) and res["v2_logits_last_bf16_vs_hf"]["bit_equal"])
     (run_dir / "verification_prefill.json").write_text(json.dumps(res, ensure_ascii=False, indent=1))
+    res["decode"] = dec
     return res
 
 
@@ -96,6 +110,9 @@ def main() -> None:
     res = verify_run(a.run.expanduser())
     print_tables(res)
     print("저장:", a.run / "verification_prefill.json")
+    if res["decode"] is not None:
+        verify_decode.print_tables(res["decode"])
+        print("저장:", a.run / "verification_decode.json")
 
 
 if __name__ == "__main__":

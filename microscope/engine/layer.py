@@ -22,8 +22,12 @@ def decoder_layer(
     mask: torch.Tensor,
     layer: int,
     capture: Capture | None = None,
+    past_k: torch.Tensor | None = None,
+    past_v: torch.Tensor | None = None,
 ):
-    """x: [1,T,H]. 반환: (층 출력 [1,T,H], RoPE 뒤 키 [1,Hk,T,D], 값 [1,Hk,T,D])."""
+    """x: [1,T,H]. 반환: (층 출력 [1,T,H], 이번 토큰들의 RoPE 뒤 키 [1,Hk,T,D], 값 [1,Hk,T,D]).
+    past_k·past_v([1,Hk,Tp,D], RoPE 뒤)가 있으면 Decode: 어텐션은 캐시 + 이번 토큰의 키·값(Tk = Tp + T)으로 계산한다.
+    cos·sin·mask는 호출하는 쪽이 이번 토큰의 위치에 맞춰 만든다."""
 
     def cap(name: str, t: torch.Tensor) -> None:
         if capture is not None:
@@ -49,10 +53,13 @@ def decoder_layer(
     cap("q", q)
     cap("k", k)
 
-    # 4 K·V 저장: 이번(M2-a)에는 Prefill의 K·V를 반환해 기록만 한다(Decode는 M2-b)
+    # 4 K·V 저장: 이번 토큰의 k·v를 반환하고, 캐시에 붙이는 일은 호출하는 쪽(KVCache.append)이 한다.
+    #   Decode에서는 HF DynamicLayer.update처럼 캐시 뒤에 이어 붙인 키·값으로 어텐션을 계산한다.
+    k_all = k if past_k is None else torch.cat([past_k, k], dim=-2)
+    v_all = v if past_v is None else torch.cat([past_v, v], dim=-2)
 
     # 5 어텐션(점수 → 마스크 → 소프트맥스 → V 섞기)
-    scores, attn, ctx = ops.causal_softmax_attention(q, k, v, mask, cfg.kv_groups, d**-0.5)
+    scores, attn, ctx = ops.causal_softmax_attention(q, k_all, v_all, mask, cfg.kv_groups, d**-0.5)
     cap("scores", scores)
     cap("attn", attn)
     cap("ctx", ctx)

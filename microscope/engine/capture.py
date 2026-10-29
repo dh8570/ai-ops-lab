@@ -1,4 +1,4 @@
-"""캡처 파일 형식 v0. 실행 하나 = 폴더 하나(manifest.json + tensors/prefill.bin).
+"""캡처 파일 형식 v0. 실행 하나 = 폴더 하나(manifest.json + tensors/prefill.bin [+ tensors/decode.bin]).
 설명은 docs/microscope/capture-format.md."""
 import json
 import secrets
@@ -10,7 +10,8 @@ import numpy as np
 import torch
 
 SCHEMA_VERSION = 0
-BIN_NAME = "tensors/prefill.bin"
+BIN_NAME = "tensors/prefill.bin"            # file 필드가 없는 M2-a 기록은 이 파일로 읽는다
+BIN_FILES = {"prefill": "tensors/prefill.bin", "decode": "tensors/decode.bin"}
 # MLP 안쪽 값은 통째로 저장하지 않고 요약만 남긴다(층당 [T, intermediate_size]라 크다)
 MLP_INNER = {"mlp.gate": "gate", "mlp.up": "up", "mlp.act": "act"}
 TOPK_PER_TOKEN = 8
@@ -29,15 +30,21 @@ def stats(t: torch.Tensor) -> dict:
             "std": float(x.std(unbiased=False)), "l2": float(x.pow(2).sum().sqrt())}
 
 
-def tensor_name(name: str, layer: int | None) -> str:
-    return name if layer is None else f"L{layer}.{name}"
+def tensor_name(name: str, layer: int | None, step: int | None = None) -> str:
+    base = name if layer is None else f"L{layer}.{name}"
+    return base if step is None else f"D{step}.{base}"
 
 
 class Recorder:
-    """layer.py·model.py의 capture 콜백. 텐서는 복사해 모아 두고, write()가 한 번에 쓴다."""
+    """layer.py·model.py의 capture 콜백 하나 = 한 단계(Prefill 또는 Decode 단계 j).
+    텐서는 복사해 모아 두고, write_run()이 한 번에 쓴다."""
 
-    def __init__(self, phase: str = "prefill"):
+    def __init__(self, phase: str = "prefill", step: int | None = None):
+        if phase not in BIN_FILES or (phase == "decode") != (step is not None):
+            raise ValueError(f"phase {phase}와 step {step}이 맞지 않는다")
         self.phase = phase
+        self.step = step
+        self.file = BIN_FILES[phase]
         self.tensors: dict[str, tuple[int | None, torch.Tensor]] = {}
         self.mlp_summary: dict[int, dict] = {}
 
@@ -45,7 +52,7 @@ class Recorder:
         if name in MLP_INNER:
             self._summarize(MLP_INNER[name], layer, t)
             return
-        key = tensor_name(name, layer)
+        key = tensor_name(name, layer, self.step)
         if key in self.tensors:
             raise ValueError(f"텐서 이름 중복: {key}")
         if t.dtype not in _DTYPES:
@@ -53,7 +60,7 @@ class Recorder:
         self.tensors[key] = (layer, t.detach().contiguous().clone())
 
     def _summarize(self, kind: str, layer: int, t: torch.Tensor) -> None:
-        s = self.mlp_summary.setdefault(layer, {"layer": layer})
+        s = self.mlp_summary.setdefault(layer, {"step": self.step, "layer": layer})
         s[kind] = stats(t)
         if kind == "act":          # SiLU(gate)×up: down_proj로 들어가는 값. 토큰마다 |값|이 큰 상위 8개 (위치, 값)
             idx = t.to(torch.float32).abs().topk(TOPK_PER_TOKEN, dim=-1).indices
@@ -62,25 +69,40 @@ class Recorder:
                              for ri, rv in zip(idx.tolist(), val.tolist(), strict=True)]
 
     def write(self, run_dir: Path, manifest: dict) -> dict:
-        """prefill.bin과 manifest.json을 쓴다. 반환: {seconds, bin_bytes}."""
-        t0 = time.perf_counter()
-        (run_dir / "tensors").mkdir(parents=True, exist_ok=True)
-        entries, offset = [], 0
-        with open(run_dir / BIN_NAME, "wb") as f:
-            for key, (layer, t) in self.tensors.items():
+        """이 Recorder 하나만 쓴다(M2-a와 같은 사용법)."""
+        return write_run(run_dir, manifest, [self])
+
+
+def write_run(run_dir: Path, manifest: dict, recorders: list[Recorder]) -> dict:
+    """Recorder들을 순서대로 단계별 파일에 이어 쓰고 manifest.json을 쓴다.
+    반환: {seconds, bytes: {파일: 바이트}}."""
+    t0 = time.perf_counter()
+    (run_dir / "tensors").mkdir(parents=True, exist_ok=True)
+    entries, sizes, handles = [], {}, {}
+    try:
+        for rec in recorders:
+            if rec.file not in handles:
+                handles[rec.file] = open(run_dir / rec.file, "wb")
+                sizes[rec.file] = 0
+            f = handles[rec.file]
+            for key, (layer, t) in rec.tensors.items():
                 dname, npdt = _DTYPES[t.dtype]
                 raw = t.view(torch.int16) if t.dtype == torch.bfloat16 else t        # bf16은 원본 비트(uint16)
                 data = raw.numpy().astype(npdt, copy=False).tobytes()
                 f.write(data)
-                entries.append({"name": key, "phase": self.phase, "layer": layer, "shape": list(t.shape),
-                                "dtype": dname, "offset": offset, "nbytes": len(data), "stats": stats(t)})
-                offset += len(data)
-        manifest = {**manifest, "tensors": entries,
-                    "mlp_summary": [self.mlp_summary[k] for k in sorted(self.mlp_summary)]}
-        sec = time.perf_counter() - t0
-        manifest.setdefault("timing", {})["capture_write_s"] = round(sec, 3)
-        (run_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
-        return {"seconds": sec, "bin_bytes": offset}
+                entries.append({"name": key, "phase": rec.phase, "step": rec.step, "layer": layer,
+                                "shape": list(t.shape), "dtype": dname, "file": rec.file,
+                                "offset": sizes[rec.file], "nbytes": len(data), "stats": stats(t)})
+                sizes[rec.file] += len(data)
+    finally:
+        for f in handles.values():
+            f.close()
+    summary = [r.mlp_summary[k] for r in recorders for k in sorted(r.mlp_summary)]
+    manifest = {**manifest, "tensors": entries, "mlp_summary": summary}
+    sec = time.perf_counter() - t0
+    manifest.setdefault("timing", {})["capture_write_s"] = round(sec, 3)
+    (run_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1))
+    return {"seconds": sec, "bytes": sizes}
 
 
 def load_manifest(run_dir: str | Path) -> dict:
@@ -94,9 +116,21 @@ def read_tensor(run_dir: str | Path, name: str, index=None, manifest: dict | Non
     e = next((x for x in m["tensors"] if x["name"] == name), None)
     if e is None:
         raise KeyError(name)
-    mm = np.memmap(Path(run_dir) / BIN_NAME, dtype=_NP[e["dtype"]], mode="r", offset=e["offset"],
+    mm = np.memmap(Path(run_dir) / e.get("file", BIN_NAME), dtype=_NP[e["dtype"]], mode="r", offset=e["offset"],
                    shape=tuple(e["shape"]))
     a = np.array(mm if index is None else mm[index])
     if e["dtype"] == "bf16":
         a = (a.astype(np.uint32) << 16).view(np.float32)        # bf16 비트는 float32의 위 16비트와 같다
     return a.astype(np.float32, copy=False)
+
+
+def read_kv_cache(run_dir: str | Path, layer: int, step: int, manifest: dict | None = None):
+    """Decode 단계 step까지 마친 뒤 층 layer의 KV 캐시 (키, 값), 각각 [Hk, T + step, D] float32.
+    = Prefill의 L{l}.k·L{l}.v 뒤에 D1..D{step}의 새 k·v를 이어 붙인 것. step 0이면 Prefill만."""
+    m = manifest or load_manifest(run_dir)
+    ks = [read_tensor(run_dir, f"L{layer}.k", manifest=m)]
+    vs = [read_tensor(run_dir, f"L{layer}.v", manifest=m)]
+    for j in range(1, step + 1):
+        ks.append(read_tensor(run_dir, f"D{j}.L{layer}.k", manifest=m))
+        vs.append(read_tensor(run_dir, f"D{j}.L{layer}.v", manifest=m))
+    return np.concatenate(ks, axis=1), np.concatenate(vs, axis=1)

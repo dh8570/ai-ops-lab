@@ -1,5 +1,6 @@
 """V2~V4 전체 Prefill(bf16): 우리 엔진으로 임시 캡처를 만들고 엔진을 해제한 뒤 HF eager와 비교한다.
-단언은 V2의 "1등이 같다"와 "상위 5개 집합이 같다" 둘뿐이다. 나머지(층별 차이, K·V, 어텐션)는 숫자만 출력한다."""
+회귀 기준은 비트 일치(PM 결정): 층 출력·K·V·어텐션이 HF eager와 torch.equal이어야 한다.
+기준 환경(baseline_env.json)과 다르면 비트 불일치는 skip(사유에 숫자 포함)."""
 import gc
 
 import pytest
@@ -7,6 +8,7 @@ import torch
 
 from microscope import run, verify
 from microscope.engine import capture, chat, config, model, weights
+from microscope.tests.baseline import require_bit_equal
 
 pytestmark = pytest.mark.model
 
@@ -40,7 +42,22 @@ def test_v2_top5_set_same(result):
     assert result["v2_top5_set_same"]
 
 
-def test_v3_v4_reported(result):
-    """숫자만 보고(한도는 PM이 정한다). 표가 모든 층을 담았는지만 확인."""
+def test_tables_cover_all_layers(result):
     n = config.load_config().layers
     assert len(result["v3_kv"]) == n and len(result["v4_attn"]) == n and len(result["v2_layers"]) == n + 2
+
+
+def test_v2_layer_outputs_bit_equal(result):
+    bad = [(r["layer"], r["max_abs"]) for r in result["v2_layers"] if not r["bit_equal"]]
+    require_bit_equal(not bad, f"V2 층(최대 절대 차이) {bad}")
+
+
+def test_v3_kv_bit_equal(result):
+    bad = [(r["layer"], r["k"]["max_abs"], r["v"]["max_abs"]) for r in result["v3_kv"]
+           if not (r["k"]["bit_equal"] and r["v"]["bit_equal"])]
+    require_bit_equal(not bad, f"V3 층(K 최대, V 최대) {bad}")
+
+
+def test_v4_attention_bit_equal(result):
+    bad = [(r["layer"], r["max_abs"]) for r in result["v4_attn"] if not r["bit_equal"]]
+    require_bit_equal(not bad, f"V4 층(최대 절대 차이) {bad}")
