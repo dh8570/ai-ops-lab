@@ -1,0 +1,12 @@
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "model: 진짜 모델 가중치(약 15GB)와 HF 공식 구현을 쓰는 느린 시험 (scripts/check-microscope.sh --model)",
+]
