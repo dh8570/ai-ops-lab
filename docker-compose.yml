@@ -89,7 +89,7 @@ services:
     user: "10004"                   # 비root. Dockerfile의 explorer 사용자와 같은 uid
     environment:
       OLLAMA_URL: http://10.97.0.1:11434   # 서버 설정값. 화면에서 바꿀 수 없다
-      TRACE_PATH: /data/traces.jsonl       # 요청 기록(한 요청에 한 줄)
+      DATA_DIR: /data                      # 실행 기록(runs/<id>.json, index.json)이 쌓이는 곳. 옛 traces.jsonl은 더 이상 쓰지 않는다
     volumes:
       - explorer-traces:/data
     ports:
