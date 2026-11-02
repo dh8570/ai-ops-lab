@@ -7,7 +7,10 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-COLOR = {"FIRING": "#E5484D", "UPDATE": "#F59E0B", "RESOLVED": "#30A46C"}
+COLOR = {"FIRING": "#E5484D", "UPDATE": "#F59E0B", "RESOLVED": "#30A46C",
+         "ANALYSIS": "#3B82F6", "ANALYSIS_FAILED": "#8B8D98"}
+LLM_PENDING = "AI 분석을 생성 중입니다. 완료되면 이어서 보냅니다."
+LATE_SUFFIX = " (복구 후 도착)"
 
 
 @dataclass
@@ -26,8 +29,12 @@ def _duration(start: str, end: str) -> str:
     return f"{sec // 60}분 {sec % 60}초"
 
 
-def build_message(kind: str, inc, stats=None, baseline=None, probe=None, added=None) -> Message:
+def build_message(kind: str, inc, stats=None, baseline=None, probe=None, added=None,
+                  llm_enabled=False, text=None, late=False) -> Message:
     footer = f"incident #{inc.id:04d} · ai-ops-lab watcher"
+    if kind in ("ANALYSIS", "ANALYSIS_FAILED"):                           # LLM 분석 후속 메시지(본문은 완성돼 옴)
+        title = f"[{kind}] {inc.severity.upper()} · {inc.service}" + (LATE_SUFFIX if late else "")
+        return Message(kind, title, text or "", [], footer, datetime.now(UTC).isoformat(timespec="seconds"))
     if kind in ("FIRING", "UPDATE"):
         fields = [("규칙", ", ".join(inc.rules))]
         if kind == "UPDATE":
@@ -38,7 +45,7 @@ def build_message(kind: str, inc, stats=None, baseline=None, probe=None, added=N
                        ("p95", f"{stats.p95_ms:,.0f} ms"), ("처리량 / 기준선", rpm)]
         if probe is not None and not probe["ok"]:
             fields.append(("헬스 체크", f"{probe['consecutive_failures']}회 연속 실패 ({probe['detail']})"))
-        desc = ("원인 분석 요약은 3주차(LLM)에서 추가됩니다." if kind == "FIRING"
+        desc = ((LLM_PENDING if llm_enabled else "") if kind == "FIRING"           # LLM이 꺼져 있으면 설명 줄 없음
                 else "진행 중인 장애에 새로운 신호가 추가됐습니다. 원인이 바뀌었을 수 있습니다.")
         ts = inc.opened_at if kind == "FIRING" else datetime.now(UTC).isoformat(timespec="seconds")
         return Message(kind, f"[{kind}] {inc.severity.upper()} · {inc.service}", desc, fields, footer, ts)
@@ -51,35 +58,38 @@ def build_message(kind: str, inc, stats=None, baseline=None, probe=None, added=N
 def to_slack(m: Message) -> dict:
     epoch = int(datetime.fromisoformat(m.timestamp).timestamp())
     when = f"<!date^{epoch}^{{date_num}} {{time_secs}}|{m.timestamp}>"     # 보는 사람의 시간대로 표시
+    blocks = []                                                           # Slack은 빈 text·빈 fields 블록을 거부한다
+    if m.description:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": m.description}})
+    if m.fields:
+        blocks.append({"type": "section", "fields": [{"type": "mrkdwn", "text": f"*{k}*\n{v}"} for k, v in m.fields]})
+    blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": f"{m.footer} · {when}"}]})
     return {
         "text": m.title,                                                  # 푸시 알림·검색용 대체 문장
-        "attachments": [{
-            "color": COLOR[m.kind],
-            "blocks": [
-                {"type": "section", "text": {"type": "mrkdwn", "text": m.description}},
-                {"type": "section", "fields": [{"type": "mrkdwn", "text": f"*{k}*\n{v}"} for k, v in m.fields]},
-                {"type": "context", "elements": [{"type": "mrkdwn", "text": f"{m.footer} · {when}"}]},
-            ],
-        }],
+        "attachments": [{"color": COLOR[m.kind], "blocks": blocks}],
     }
 
 
 def to_discord(m: Message) -> dict:
-    return {"embeds": [{
+    embed = {
         "title": m.title, "description": m.description, "color": int(COLOR[m.kind][1:], 16),
         "fields": [{"name": k, "value": v, "inline": True} for k, v in m.fields],
         "footer": {"text": m.footer}, "timestamp": m.timestamp,
-    }]}
+    }
+    if not m.description:                                                 # Discord는 빈 description을 거부한다
+        del embed["description"]
+    return {"embeds": [embed]}
 
 
 FORMATTERS = {"slack": to_slack, "discord": to_discord}
 
 
 class Notifier:
-    def __init__(self, provider: str, webhook_url: str, emit):
+    def __init__(self, provider: str, webhook_url: str, emit, llm_enabled: bool = False):
         if provider not in FORMATTERS:
             raise ValueError(f"지원하지 않는 알림 채널: {provider}")
         self.provider, self.url, self.emit = provider, webhook_url, emit
+        self.llm_enabled = llm_enabled                                     # FIRING 설명 줄(분석 예고) 표시 여부
 
     def send(self, kind: str, inc, **ctx) -> bool:
         """어떤 경우에도 예외를 밖으로 내보내지 않는다. 감시 루프가 죽으면 이미 저장된 장애의 FIRING 알림이 사라진다."""
@@ -91,7 +101,7 @@ class Notifier:
             return False
 
     def _send_inner(self, kind: str, inc, **ctx) -> bool:
-        payload = FORMATTERS[self.provider](build_message(kind, inc, **ctx))
+        payload = FORMATTERS[self.provider](build_message(kind, inc, llm_enabled=self.llm_enabled, **ctx))
         if not self.url:
             self.emit("notify_dryrun", provider=self.provider, kind=kind, incident_id=inc.id, payload=payload)
             return True

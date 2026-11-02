@@ -137,7 +137,7 @@ def test_build_evidence_shape_and_key_order():
 
 def test_build_evidence_excludes_healthz_and_caps_counts():
     recs = [_rec(f"/p{i}", 200) for i in range(9)] + [_rec("/healthz", 200) for _ in range(50)]
-    recs += [_rec("/e", 500, error=f"Err{i}: m") for i in range(8)]
+    recs += [_rec("/e", 500, error=f"E{i}Error: m") for i in range(8)]
     ev = _evidence(recs)
     assert len(ev["top_paths"]) == 5
     assert len(ev["top_error_kinds"]) == 5
@@ -183,7 +183,7 @@ def test_build_evidence_is_deterministic_bytes():
 
 
 def test_build_evidence_shrinks_when_estimate_exceeds_budget():
-    recs = [_rec(f"/p{i}", 200) for i in range(8)] + [_rec("/e", 500, error=f"Err{i}: m") for i in range(7)]
+    recs = [_rec(f"/p{i}", 200) for i in range(8)] + [_rec("/e", 500, error=f"E{i}Error: m") for i in range(7)]
     assert len(_evidence(recs)["top_paths"]) == 5
     big = _evidence(recs, runbooks_text="가" * 2700)
     assert len(big["top_paths"]) == 3 and len(big["top_error_kinds"]) == 2
@@ -211,9 +211,10 @@ def test_build_messages_goes_through_mask(monkeypatch):
 
     monkeypatch.setattr(analysis, "mask", fake)
     msgs = build_messages(_evidence(), "RB")
-    assert len(calls) == 2
-    assert all(m["content"].startswith("<") and m["content"].endswith(">") for m in msgs)
-    assert calls[0].startswith(SYSTEM_PROMPT_V1) and calls[1].startswith("[장애 요약]")
+    assert len(calls) == 1                                    # user 글에만 (system은 고정 글이라 마스킹하지 않는다)
+    assert calls[0].startswith("[장애 요약]")
+    assert msgs[0]["content"].startswith(SYSTEM_PROMPT_V1)
+    assert msgs[1]["content"].startswith("<") and msgs[1]["content"].endswith(">")
 
 
 def test_mask_is_identity_for_now():
@@ -246,7 +247,7 @@ def test_estimated_tokens_fit_in_context():
 
 
 def test_build_messages_shrinks_a_wide_evidence_when_runbooks_are_big():
-    recs = [_rec(f"/p{i}", 200) for i in range(8)] + [_rec("/e", 500, error=f"Err{i}: m") for i in range(7)]
+    recs = [_rec(f"/p{i}", 200) for i in range(8)] + [_rec("/e", 500, error=f"E{i}Error: m") for i in range(7)]
     ev = _evidence(recs)                                    # 런북 없이 만들었으니 5, 5
     text = build_messages(ev, "가" * 2700)[1]["content"]
     assert text.count("Err") == 2 and "/p3 " not in text
