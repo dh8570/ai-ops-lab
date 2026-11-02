@@ -1,32 +1,40 @@
-"""파이프라인 탐험 사이트 S0: 문장 -> 토큰화 -> 읽기·쓰기(스트리밍) -> 글자 복원. 화면의 숫자는 모두 실측이다."""
+"""파이프라인 탐험 사이트: 실행 기록(JSON 파일)을 읽어 보여 주는 뷰어의 서버 쪽.
+
+- 화면은 파일만 읽는다: ./data/index.json, ./data/runs/<run_id>.json, ./content/*.json
+- 실행(run)과 토큰화처럼 '만드는' 기능만 ./api/... 를 쓴다. 실행 하나가 끝나면 기록 파일 하나가 남는다(runs.py).
+"""
 import http.client
 import json
 import os
 import threading
 import time
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, request, send_from_directory
+from flask import Flask, Response, abort, jsonify, request, send_from_directory
 from tokenizers import Tokenizer
 
 import limits
 import ollama
+import runs
 import streamparse
 import tokenization
 import tokenizer_pin
-import traces
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://10.97.0.1:11434")   # 서버 설정값. 사용자 입력으로 바꿀 수 없다
 TOKENIZER_PATH = os.environ.get("TOKENIZER_PATH", "/opt/tokenizer/tokenizer.json")
-TRACE_PATH = os.environ.get("TRACE_PATH", "/data/traces.jsonl")
+# 볼륨 explorer-traces. runs/와 index.json이 여기에 쌓인다
+DATA_DIR = os.environ.get("DATA_DIR", "/data")
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+STATIC_EXT = {".js": "text/javascript", ".css": "text/css", ".json": "application/json"}
 
 app = Flask(__name__, static_folder=None)
 app.config["MAX_CONTENT_LENGTH"] = 256 * 1024          # 8000자 x 이모지 이스케이프(12바이트)도 들어가는 크기
 
 _busy = threading.Lock()                                # Ollama를 부르는 요청(run, probe)은 한 번에 하나
 PROBE_PROMPT = "안녕"
+_version_cache = {"t": 0.0, "v": None}
 
 
 @lru_cache(maxsize=1)
@@ -34,15 +42,23 @@ def get_tokenizer() -> Tokenizer:
     return Tokenizer.from_file(TOKENIZER_PATH)
 
 
+def _ollama_version():
+    """기록의 environment에 넣을 Ollama 버전. 실행마다 부르지 않게 5분 캐시한다."""
+    if time.monotonic() - _version_cache["t"] > 300:
+        _version_cache.update(t=time.monotonic(), v=ollama.version(OLLAMA_URL))
+    return _version_cache["v"]
+
+
 @app.after_request
 def _headers(resp):
     resp.headers["Cache-Control"] = "no-store"
     resp.headers["X-Content-Type-Options"] = "nosniff"
     resp.headers["Referrer-Policy"] = "no-referrer"
-    # 외부 주소로 나가는 요청(CDN·글꼴·외부 API)을 브라우저가 막게 한다. 같은 출처(connect-src 'self')만 허용.
+    # 인라인 스크립트가 없으므로 'unsafe-inline'을 쓰지 않는다.
+    # 외부 주소(CDN·글꼴·외부 API)로 나가는 요청은 브라우저가 막는다.
     resp.headers["Content-Security-Policy"] = (
-        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
-        "connect-src 'self'; img-src data:; base-uri 'none'; form-action 'none'")
+        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; "
+        "img-src 'self' data:; base-uri 'none'; form-action 'none'")
     return resp
 
 
@@ -74,11 +90,40 @@ class _Slot:
             _busy.release()
 
 
+# ---------------------------------------------------------------- 화면 파일과 기록 읽기 (파일만 읽는 경로)
 @app.get("/")
 def index():
     return send_from_directory(STATIC_DIR, "index.html")
 
 
+@app.get("/<any(js,css,content):kind>/<path:name>")
+def static_files(kind: str, name: str):
+    """static/{js,css,content} 아래의 .js .css .json 만. 경로 이탈은 send_from_directory가 막는다."""
+    ext = os.path.splitext(name)[1]
+    if ext not in STATIC_EXT:
+        abort(404)
+    return send_from_directory(STATIC_DIR / kind, name, mimetype=STATIC_EXT[ext])
+
+
+@app.get("/data/index.json")
+def data_index():
+    path = Path(DATA_DIR) / "index.json"
+    if not path.is_file():                              # 아직 실행이 없으면 빈 목록
+        return Response("[]\n", mimetype="application/json")
+    return send_from_directory(DATA_DIR, "index.json", mimetype="application/json")
+
+
+@app.get("/data/runs/<run_id>.json")
+def data_run(run_id: str):
+    if not runs.RUN_ID_RE.fullmatch(run_id):            # 정규식에 맞지 않으면 파일 시스템을 보지도 않는다
+        abort(404)
+    return send_from_directory(Path(DATA_DIR) / "runs", f"{run_id}.json", mimetype="application/json")
+
+
+# /data 아래의 다른 파일(예: 옛 traces.jsonl)은 라우트가 없으므로 404다.
+
+
+# ---------------------------------------------------------------- 만드는 기능 (live에서만 쓰는 ./api/...)
 @app.get("/api/config")
 def api_config():
     try:
@@ -182,37 +227,70 @@ def _line(obj: dict) -> bytes:
 
 
 def _run_stream(req: dict):
-    """NDJSON 사건을 하나씩 내보낸다: start -> chunk* -> done(또는 error). 끝나면 traces.jsonl에 한 줄 남긴다."""
+    """NDJSON 사건을 하나씩 내보낸다: start -> chunk* -> done(또는 error). 모든 실행은 기록 파일 하나를 남긴다.
+
+    start와 done(또는 error) 사건에 run_id를 담는다. 기록은 done/error 사건을 내보내기 전에 쓴다
+    (화면이 run_id를 받고 바로 기록을 읽어도 이미 있게). 끊기면(aborted) finally에서 쓴다.
+    사용자가 요청한 계산(토큰화)은 서버가 여기서 한 번만 하고 기록에 넣는다. 브라우저가 계산한 값은 저장하지 않는다.
+    """
     options = req["options"]
-    local_tokens = tokenization.count_tokens(get_tokenizer(), req["prompt"])
-    t0 = time.monotonic()                              # '시작' = 요청을 보내기 시작한 시각(연결 포함)
-    status, error, parts, final = "ok", None, [], {}
-    conn = None
+    now = datetime.now(UTC)
+    runs_dir = Path(DATA_DIR) / "runs"
+    run_id = runs.make_run_id(now, exists=lambda rid: (runs_dir / f"{rid}.json").exists())
+    created_at = runs.utc_iso(now)
+
     try:
-        yield _line({"type": "start", "model": req["model"], "options": options, "local_tokens": local_tokens})
+        t = time.perf_counter()
+        tok_result = tokenization.tokenize_text(get_tokenizer(), req["prompt"])
+        tok_ms = round((time.perf_counter() - t) * 1000, 3)
+    except Exception as e:  # noqa: BLE001
+        yield _line({"type": "error", "message": f"토큰화 실패: {e}"})
+        return
+    version = _ollama_version()
+
+    chunks, done, status, error = [], None, "ok", None
+    saved, conn = False, None
+
+    def save():
+        nonlocal saved
+        if saved:
+            return
+        saved = True
+        record = runs.build_playground_record(
+            run_id=run_id, created_at=created_at, prompt=req["prompt"], model=req["model"], options=options,
+            ollama_version=version, tokenizer={"repo": tokenizer_pin.REPO, "revision": tokenizer_pin.REVISION,
+                                               "sha256": tokenizer_pin.SHA256},
+            tok_result=tok_result, tok_ms=tok_ms, chunks=chunks, done=done, status=status, error=error)
+        runs.write_run(DATA_DIR, record)
+
+    try:
+        yield _line({"type": "start", "run_id": run_id, "model": req["model"], "options": options,
+                     "local_tokens": tok_result["token_count"]})
+        t0 = time.monotonic()                          # '시작' = 요청을 보내기 시작한 시각(연결 포함)
         conn, resp = ollama.open_generate_stream(
             OLLAMA_URL, {"model": req["model"], "prompt": req["prompt"], "options": options})
         if resp.status != 200:
             raise ollama.OllamaError(f"HTTP {resp.status} {resp.read()[:300].decode('utf-8', 'replace')}")
         for ev in streamparse.parse_stream(iter(resp.readline, b""), time.monotonic, t0):
             if ev["type"] == "chunk":
-                parts.append(ev["text"])
+                chunks.append(ev)
             elif ev["type"] == "done":
-                final = ev
+                done = ev
+                save()
+                ev = {**ev, "run_id": run_id}
             elif ev["type"] == "error":
                 status, error = "error", ev["message"]
+                save()
+                ev = {**ev, "run_id": run_id}
             yield _line(ev)
     except GeneratorExit:                              # 브라우저가 끊음. Ollama 연결도 닫아 생성을 멈추게 한다.
         status = "aborted"
         raise
     except (ollama.OllamaError, OSError, http.client.HTTPException) as e:
         status, error = "error", str(e)
-        yield _line({"type": "error", "message": str(e)})
+        save()
+        yield _line({"type": "error", "message": str(e), "run_id": run_id})
     finally:
         if conn is not None:
             conn.close()
-        stats = final.get("stats", {})
-        traces.append_trace(TRACE_PATH, {
-            "status": status, "error": error, "model": req["model"], "options": options, "prompt": req["prompt"],
-            "local_tokens": local_tokens, "chunks": len(parts), "answer": "".join(parts), "stats": stats,
-            "elapsed_ms": round((time.monotonic() - t0) * 1000, 1)})
+        save()                                         # 이미 썼으면 아무 일도 하지 않는다
