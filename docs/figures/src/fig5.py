@@ -1,52 +1,51 @@
 from lib import *
-s = frame("교체 로드맵과 완료 기준", "흐름은 유지하고 부품만 교체. 모든 교체는 v0 완료 기준을 회귀 테스트로 다시 통과해야 머지", 5,
-          legend=[("box", None, "v0 스켈레톤"), ("solid", C["line"], "교체 단계")])
-x0, wk = 470, 57.5   # week 1 starts at x0
+s = frame("4주 AI 우선 로드맵과 완료 기준", "AI를 어떤 문제에 적용하고, 어떻게 동작하고, 데이터를 어떻게 쓰는지 배우는 4주. 매주 AI 질문 세 가지와 채점표·비교표로 끝낸다", 5,
+          legend=[("box", None, "이번 주 (A)"), ("solid", C["line"], "완료 · 계획")],
+          ver="v0.3 · 2026-10-27")                       # Fig 2·5만 v0.3 (lib.VERSION은 v0.2로 둔다)
+x0, dw = 520, 33.8                                        # 가로축: 10/16부터 하루 dw px, 10/16~11/23 = 39일
+def dx(d): return x0 + d * dw                             # d = 10/16 기준 경과일 (그 날의 시작 위치)
+TODAY = 11                                                # 10/27 = 10/16 + 11일
 s.rect(60, 215, 1800, 560, fill=C["panel"], stroke=C["border"], rx=12)
-for w in range(1, 25):
-    x = x0 + (w - 1) * wk
-    s.add(f'<line x1="{x}" y1="262" x2="{x}" y2="752" stroke="{C["grid"]}" stroke-width="1"/>')
-    s.text(x + wk / 2, 252, f"{w}", 14, 400, C["muted"], "middle", mono=True)
-s.text(90, 252, "주차", 15, 600, C["muted"])
-rows = [("P1", "스켈레톤 v0", "앱 · 로그 · 임계값 · LLM · Slack", 1, 3, True),
-        ("2-1", "로그 수집", "JSON 파일 → ELK", 4, 6, False),
-        ("2-2", "VM 구성", "수동 → Ansible", 7, 8, False),
-        ("2-3", "메트릭", "→ Prometheus · Grafana", 9, 10, False),
-        ("2-4", "이상 탐지", "임계값 → Isolation Forest", 11, 12, False),
-        ("2-5", "지식 활용", "프롬프트 → RAG · pgvector", 13, 15, False),
-        ("2-6", "배치", "→ Airflow 리포트", 16, 17, False),
-        ("2-7", "에이전트", "→ Tool calling · n8n", 18, 18, False),
-        ("2-8", "배포", "→ Terraform · OCI · Actions", 19, 21, False),
-        ("P3", "시연 · 포트폴리오", "장애 시나리오 3종 데모", 22, 24, True)]
+# 주 단위 눈금: 시작(10/16), 직전 주(10/20), 각 주 경계(10/27·11/3·11/10·11/17), 끝(11/23)
+for d, lab in [(0, "10/16"), (4, "10/20"), (11, "10/27"), (18, "11/3"), (25, "11/10"), (32, "11/17"), (39, "11/23")]:
+    s.add(f'<line x1="{dx(d)}" y1="262" x2="{dx(d)}" y2="752" stroke="{C["grid"]}" stroke-width="1"/>')
+    if d != TODAY: s.text(dx(d) + (4 if d == 39 else 0), 252, lab, 14, 400, C["muted"], "end" if d == 39 else "middle", mono=True)
+s.text(90, 252, "단계", 15, 600, C["muted"])
+# (표지, 주제, 결과물 줄들, 시작일, 끝일, 상태, 막대 안 글자). 날짜는 10/16 기준 경과일 [시작, 끝)
+rows = [("완료", "기반", ["앱·로그·Watcher·알림·합격 시험", "+ GPU 서버 이전"], 0, 11, "done", "완료 · 10/16 ~ 10/26"),
+        ("A", "LLM이 장애를 분석하게 하기", ["→ 장애 시나리오 5개 채점표", "+ 탐험 사이트 척추 · 토큰화 단계"], 11, 18, "key", "10/27 ~ 11/2"),
+        ("B", "AI가 쓰는 데이터 · RAG · 현미경 엔진", ["→ RAG 있음 대 없음 비교표", "+ 층별 실제 값을 보는 현미경 화면"], 18, 25, "plan", "11/3 ~ 11/9"),
+        ("C", "규칙 대 ML 비교 (최소) · 현미경 화면", ["→ 규칙 대 ML 비교표 1개"], 25, 32, "plan", "11/10 ~ 11/16"),
+        ("D", "마무리 · 공개 (정적 내보내기)", ["→ 최종 문서 · 시연", "에이전트(tool calling)는 선택"], 32, 39, "plan", "11/17 ~ 11/23")]
 y = 290
-for rid, name, desc, a, b, key in rows:
-    s.text(90, y + 22, rid, 15, 700, C["blue"] if key else C["muted"], mono=True)
-    s.text(150, y + 22, name, 17, 700, C["ink"])
-    bx = x0 + (a - 1) * wk + 3; bw = (b - a + 1) * wk - 6
-    s.rect(bx, y + 2, bw, 30, fill=C["bluet"] if key else "#EEF0F3", stroke=C["blue"] if key else C["line"], rx=6, sw=2 if key else 1.2)
-    tx = bx + bw + 12
-    if tx + len(desc) * 13 > 1840: s.text(bx - 12, y + 23, desc, 15, 400, C["body"], "end")
-    else: s.text(tx, y + 23, desc, 15, 400, C["body"])
-    y += 46
-for w, lab in [(3, "v0 DoD"), (24, "완료")]:
-    x = x0 + w * wk
-    s.add(f'<path d="M{x},{252+6} l9,9 l-9,9 l-9,-9 z" fill="{C["orange"]}"/>' if False else "")
-# DoD + limits
+for tag, name, desc, a, b, st, inside in rows:
+    s.text(90, y + 24, tag, 16, 700, {"done": C["green"], "key": C["blue"]}.get(st, C["muted"]), mono=(st != "done"))   # 한글은 mono 금지
+    s.text(150, y + 24, name, 17, 700, C["ink"])
+    for i, t in enumerate(desc): s.text(150, y + 48 + i * 20, t, 14, 400, C["green"] if st == "done" else C["body"])
+    fill, stroke, sw, dash = {"done": ("#EEF0F3", C["line"], 1.2, None), "key": (C["bluet"], C["blue"], 2.5, None),
+                              "plan": ("#FFFFFF", C["line"], 1.5, None)}[st]
+    bx, bw = dx(a) + 3, (b - a) * dw - 6
+    s.rect(bx, y + 6, bw, 36, fill=fill, stroke=stroke, rx=6, sw=sw, dash=dash)
+    s.text(bx + bw / 2, y + 30, inside, 14, 600, C["ink"] if st == "key" else C["muted"], "middle", mono=st in ("key", "plan"))
+    y += 90
+# A주 시작(10/27) 세로선
+s.add(f'<line x1="{dx(TODAY)}" y1="262" x2="{dx(TODAY)}" y2="752" stroke="{C["orange"]}" stroke-width="2.5"/>')
+s.text(dx(TODAY), 252, "A주 시작 10/27", 14, 700, C["orange"], "middle", mono=False)
+# 완료 기준 + 범위 밖
 s.rect(60, 795, 1060, 215, fill=C["panel"], stroke=C["border"], rx=12)
-s.text(90, 834, "v0 완료 기준 (Definition of Done) · 회귀 게이트", 19, 700, C["ink"])
-dod = ["/error 주입 후 2분 이내 [FIRING] 알림 도착 (요약·원인 후보는 3주차)",
-       "같은 장애에 대한 FIRING 알림 정확히 1건 (그룹핑)",
-       "Ollama 중지 상태에서도 기본 템플릿 알림 전송 (유실 0건)",
-       "정상 5분 유지 후 [RESOLVED] 알림과 지속 시간 전송"]
-for i, t in enumerate(dod):
+s.text(90, 834, "완료 기준 · 회귀 게이트", 19, 700, C["ink"])
+dod = [("/error 주입 후 2분 이내 [FIRING] 알림 도착 (요약·원인 후보는 A주)", "자동 검증 PASS", C["green"]),
+       ("같은 장애에 대한 FIRING 알림 정확히 1건 (그룹핑)", "자동 검증 PASS", C["green"]),
+       ("Ollama 중지 상태에서도 기본 알림 전송 (유실 0건)", "A주에 자동 검증 추가", C["orange"]),
+       ("정상 5분 유지 후 [RESOLVED] 알림과 지속 시간 전송", "자동 검증 PASS", C["green"])]
+for i, (t, st, col) in enumerate(dod):
     yy = 874 + i * 34
     s.rect(92, yy - 16, 18, 18, fill="#FFFFFF", stroke=C["blue"], rx=4, sw=2)
     s.text(124, yy, t, 16, 400, C["body"])
-    if i in (0, 1, 3):                                   # 알림 항목은 scripts/acceptance/alerts.py로 자동 검증 (2026-10-22 PASS)
-        s.text(1100, yy, "자동 검증 PASS · alerts.py", 14, 600, C["green"], "end", mono=False)
+    s.text(1100, yy, st, 14, 600, col, "end", mono=False)
 s.rect(1140, 795, 720, 215, fill=C["panel"], stroke=C["border"], rx=12)
 s.add(f'<rect x="1140" y="795" width="6" height="215" rx="3" fill="{C["orange"]}"/>')
-s.text(1170, 834, "v0 알려진 한계", 19, 700, C["ink"])
-lim = ["Watcher 자체 장애 미감지 → heartbeat 도입 예정", "자동 복구 없음, 조치는 사람이 결정", "단일 VM · 단일 앱 대상, HA 없음", "고정 임계값 → 트래픽 패턴 변화에 둔감 (2-4에서 보완)"]
-s.lines(1170, 874, ["– " + t for t in lim], 16, 2.1, col=C["body"])
+s.text(1170, 834, "범위 밖 (프로젝트 이후)", 19, 700, C["ink"])
+s.lines(1170, 874, ["ELK · Ansible · Prometheus · Airflow", "Terraform · OCI · GitHub Actions"], 16, 2.1, col=C["body"], mono=True)
+s.text(1170, 966, "AI 단계가 요구할 때만 그 부분을 최소로", 16, 400, C["body"])
 render(s, "fig5_roadmap")

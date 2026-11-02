@@ -1,0 +1,152 @@
+[
+  {
+    "id": "input",
+    "title": "입력",
+    "lane": "A",
+    "week": "A",
+    "implemented": true,
+    "applies_to": [
+      "playground"
+    ]
+  },
+  {
+    "id": "tokenize",
+    "title": "토큰화",
+    "lane": "A",
+    "week": "A",
+    "implemented": true,
+    "applies_to": [
+      "playground"
+    ]
+  },
+  {
+    "id": "load",
+    "title": "모델 올리기",
+    "lane": "A",
+    "week": "A",
+    "implemented": true,
+    "applies_to": [
+      "playground"
+    ]
+  },
+  {
+    "id": "prefill",
+    "title": "읽기",
+    "lane": "A",
+    "week": "A",
+    "implemented": true,
+    "applies_to": [
+      "playground"
+    ]
+  },
+  {
+    "id": "decode",
+    "title": "쓰기",
+    "lane": "A",
+    "week": "A",
+    "implemented": true,
+    "applies_to": [
+      "playground"
+    ]
+  },
+  {
+    "id": "restore",
+    "title": "글자 복원",
+    "lane": "A",
+    "week": "A",
+    "implemented": true,
+    "applies_to": [
+      "playground"
+    ]
+  },
+  {
+    "id": "log_emit",
+    "title": "로그 발생",
+    "lane": "A",
+    "week": "A",
+    "implemented": false,
+    "applies_to": [
+      "incident"
+    ]
+  },
+  {
+    "id": "select",
+    "title": "선별",
+    "lane": "A",
+    "week": "A",
+    "implemented": false,
+    "applies_to": [
+      "incident"
+    ]
+  },
+  {
+    "id": "mask",
+    "title": "마스킹",
+    "lane": "A",
+    "week": "A",
+    "implemented": false,
+    "applies_to": [
+      "incident"
+    ]
+  },
+  {
+    "id": "prompt",
+    "title": "프롬프트 조립",
+    "lane": "A",
+    "week": "A",
+    "implemented": false,
+    "applies_to": [
+      "incident"
+    ]
+  },
+  {
+    "id": "notify",
+    "title": "알림",
+    "lane": "A",
+    "week": "A",
+    "implemented": false,
+    "applies_to": [
+      "incident"
+    ]
+  },
+  {
+    "id": "store",
+    "title": "기록 저장",
+    "lane": "A",
+    "week": "A",
+    "implemented": false,
+    "applies_to": [
+      "incident"
+    ]
+  },
+  {
+    "id": "chunk",
+    "title": "청킹",
+    "lane": "B",
+    "week": "B",
+    "implemented": false,
+    "applies_to": [
+      "incident"
+    ]
+  },
+  {
+    "id": "embed",
+    "title": "임베딩",
+    "lane": "B",
+    "week": "B",
+    "implemented": false,
+    "applies_to": [
+      "incident"
+    ]
+  },
+  {
+    "id": "retrieve",
+    "title": "벡터 검색",
+    "lane": "B",
+    "week": "B",
+    "implemented": false,
+    "applies_to": [
+      "incident"
+    ]
+  }
+]

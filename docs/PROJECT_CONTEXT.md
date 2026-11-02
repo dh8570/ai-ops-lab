@@ -10,7 +10,7 @@
 - 원칙: AI 우선(인프라는 AI 단계를 막을 때만 최소로), 매주 "AI 질문 세 가지"와 채점표·비교표 1개 이상, 모르는 것은 질문하며 배운다(용어는 docs/glossary.md).
 - 계획과 주별 상세는 `docs/plan/ai-first-4weeks.md`가 유일한 원본이다.
 - (구버전) 24주 로드맵(워킹 스켈레톤 후 ELK·Ansible·Prometheus·Airflow·Terraform·OCI 등으로 교체)은 2026-10-27에 4주 AI 우선 계획으로 대체했다.
-- 설계 그림: `docs/figures/` (Fig 1·3·4는 2주차에 v0.2로 갱신, Fig 5는 구버전이라 D주에 다시 그린다).
+- 설계 그림: `docs/figures/` (Fig 2·5는 v0.3, 2026-10-27. Fig 1·3·4는 v0.2. Fig 3·4는 A주 설계 결정 뒤에 고친다).
 
 ## 2. 환경
 
@@ -18,7 +18,7 @@
 | --- | --- |
 | 물리 서버 controller1 | Ubuntu 26.04.1, 논리 CPU 48개, 메모리 251GB, 디스크 1.8TB, GPU RTX 4080 16GB(드라이버 595-open). 기존 업무 서비스는 꺼 둠. 서버에서의 명령 실행은 사용자가 직접 한다 |
 | VM ai-lab-gpu (Multipass) | Ubuntu 24.04, 8코어 / 32GB / 100GB. 모든 실습 공간. 사용자 `ubuntu`. Multipass 1.17.0(업데이트 보류), 스냅샷 `docker-ready`. GPU는 서버에만 있고 VM에는 없다 |
-| VM↔서버 통로 | 10.97.0.0/24, 서버 쪽 10.97.0.1. Ollama는 서버에서 돌고 이 주소(10.97.0.1:11434)에만 공개 예정 |
+| VM↔서버 통로 | 10.97.0.0/24, 서버 쪽 10.97.0.1. Ollama는 서버에서 돌고 이 주소(10.97.0.1:11434)에만 공개 중(2026-10-27 설치, 0.40.2, 모델 qwen2.5:7b Q4_K_M, systemd 서비스) |
 | 접속 | Tailscale + **표준 OpenSSH**. Tailscale은 `--ssh` 없이 쓴다(Tailscale SSH는 끔, 2주차 결정) |
 | 개발 도구 | Windows의 VS Code / Cursor Remote-SSH, Claude Code |
 | 알림 | Slack `#alerts` (Incoming Webhook, `.env`의 `NOTIFY_WEBHOOK_URL`) |
@@ -113,6 +113,8 @@ docker compose stop app; (2분 뒤) docker compose start app                    
   - 2-C 완료: R4 프로브, UPDATE 알림(180초 유예), policy 분리, 단위 테스트 29개, ruff·pytest 검사 스크립트, 알림 합격 시험 자동화(errors·stop 시나리오)
 - 새 서버(controller1 위 ai-lab-gpu)로 이전 완료 (합격 시험 통과)
 - 알림 실패 원인 기록 보강 (PR #5 병합)
+- 탐험 사이트 S0 병합 (PR #7)
+- 현미경 엔진 스파이크 통과: Qwen2.5-7B bf16을 VM CPU에서 실행, Prefill 9.3초(72토큰), Decode 0.66초/토큰, 메모리 14.7GiB
 - **현재: A주 시작** (2026-10-27). 세부는 `docs/plan/ai-first-4weeks.md`
 
 ## 5. 다음 할 일
@@ -165,7 +167,7 @@ Ollama 추가(8B 이하), LLM 호출 전 마스킹·최근 50줄 제한, 런북 
 - Slack 알림 간헐 실패: 원인 미확인. 재발하면 `notify_failed`의 attempts 기록으로 조사
 - app 컨테이너와 이미지 이름표 불일치: 내용은 같을 것으로 추정. 다음 재생성 때 합격 시험으로 확인
 - 서버 root 비밀번호 SSH 허용: 정리 과제
-- 설계 그림 Fig 5는 구버전: D주에 다시 그린다
+- 설계 그림 Fig 2에는 explorer(탐험 사이트)·microscope(현미경 엔진) 서비스가 없다. D주 그림 정리에서 추가한다.
 
 ## 6. 기록 형식 (노션)
 
