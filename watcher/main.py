@@ -1,29 +1,53 @@
 import json
 import signal
 import sys
+import threading
 import time
 from collections import deque
 from datetime import UTC, datetime
+from pathlib import Path
 from statistics import median
 
+import analysis
 from config import Config
+from dispatcher import Dispatcher
 from logreader import LogReader
 from notifier import Notifier
 from policy import should_notify_update, should_open_from_probe, should_update_baseline
 from probe import Prober
 from rules import evaluate, probe_finding
 from state import IncidentManager, Store
-from stats import summarize
+from stats import WindowStats, summarize
+
+RUNBOOK_DIR = Path(__file__).resolve().parent / "runbooks"
+_emit_lock = threading.RLock()     # 워커 스레드도 emit을 부른다. RLock: SIGTERM 핸들러가 출력 도중 끼어들어도 교착 없음
 
 
 def emit(event: str, **fields) -> None:
     """Watcher 자신의 동작도 JSON 한 줄로 남긴다."""
     record = {"ts": datetime.now(UTC).isoformat(timespec="seconds"), "event": event, **fields}
-    print(json.dumps(record, ensure_ascii=False), flush=True)
+    line = json.dumps(record, ensure_ascii=False)
+    with _emit_lock:
+        print(line, flush=True)
+
+
+def make_evidence(cfg: Config, *args, **kwargs) -> dict | None:
+    """LLM 분석용 근거(메인 스레드에서 만든다). LLM이 꺼져 있거나 만들다 실패하면 None. 감시 루프를 막지 않는다."""
+    if not cfg.llm_enabled:
+        return None
+    try:
+        return analysis.build_evidence(*args, window_sec=cfg.window_sec, exclude_paths=cfg.exclude_paths, **kwargs)
+    except Exception as e:
+        emit("llm_skipped", reason=f"evidence_error:{type(e).__name__}")
+        return None
 
 
 def main() -> None:
+    dispatcher = None                                               # 핸들러가 Dispatcher 생성 전에 불릴 수도 있다
+
     def _stop(signum, frame):
+        if dispatcher is not None:
+            dispatcher.close()                                      # 큐에 남은 알림을 최대 8초 보내고 끝낸다
         emit("stop", signal=signal.Signals(signum).name)
         sys.exit(0)
     # docker stop / restart 시 즉시 정상 종료 (없으면 PID 1이 SIGTERM을 무시해 10초 뒤 SIGKILL, exit 137)
@@ -32,7 +56,9 @@ def main() -> None:
     cfg = Config()
     store = Store(cfg.state_path)
     manager = IncidentManager(store, cfg.service, cfg.resolve_windows)
-    notifier = Notifier(cfg.notify_provider, cfg.webhook_url, emit)
+    notifier = Notifier(cfg.notify_provider, cfg.webhook_url, emit, llm_enabled=cfg.llm_enabled)
+    runbooks_text = analysis.load_runbooks(RUNBOOK_DIR)            # 시작할 때 한 번 읽는다
+    dispatcher = Dispatcher(cfg, notifier, emit, runbooks_text)    # LLM_HOLD_SEC>0이면 여기서 멈춘다
     prober = Prober(cfg.probe_url, cfg.probe_timeout, cfg.probe_fail_threshold)
 
     # 재시작 전 상태 복원: 읽던 위치, 기준선 기록, 마지막으로 읽은 시각을 한 묶음으로
@@ -48,7 +74,9 @@ def main() -> None:
          window_sec=cfg.window_sec, probe_interval=cfg.probe_interval, ticks_per_window=ticks_per_window,
          resolve_windows=cfg.resolve_windows, restored_offset=reader.offset, restored_history=len(history),
          open_incident=open_inc.id if open_inc else None,
-         notify_mode=cfg.notify_provider if cfg.webhook_url else "dryrun")
+         notify_mode=cfg.notify_provider if cfg.webhook_url else "dryrun",
+         llm_enabled=cfg.llm_enabled, llm_model=cfg.llm_model if cfg.llm_enabled else None)
+    dispatcher.start()                                              # 알림 스레드(+ LLM 스레드, 예열)
 
     tick = 0
     next_tick = time.monotonic() + cfg.probe_interval
@@ -56,6 +84,7 @@ def main() -> None:
         time.sleep(max(0, next_tick - time.monotonic()))
         next_tick += cfg.probe_interval                             # 예정 시각 기준, 지연 누적 방지
         tick += 1
+        dispatcher.ensure_alive()                                   # 죽은 워커 스레드가 있으면 다시 띄운다
 
         # A. 합성 프로브 (매 틱, 15초)
         was_firing = prober.firing
@@ -68,7 +97,10 @@ def main() -> None:
             if should_open_from_probe(was_firing, prober.firing, store.open_incident(cfg.service)):
                 action, inc, _ = manager.step([probe_finding(True, prober)])
                 emit("incident", action=action, incident_id=inc.id, state=inc.state, trigger="R4")
-                notifier.send("FIRING", inc, probe=p)
+                baseline = median(history) if len(history) >= cfg.r3_min_windows else None
+                evidence = make_evidence(cfg, inc, WindowStats(0, 0, 0.0, 0.0), None, baseline, p, time.time(),
+                                         current_rules=["R4"], runbooks_text=runbooks_text)
+                dispatcher.submit("FIRING", inc, evidence=evidence, trigger="R4", probe=p)
             continue
 
         # B. 로그 창 처리 (4번째 틱마다, 60초)
@@ -105,12 +137,15 @@ def main() -> None:
              state=inc.state if inc else "NORMAL")
 
         # 4. 알림은 새 장애(fire), 유예 시간이 지난 신호 추가(escalate), 장애 종료(resolve) 세 전이에서만
+        #    (보내기는 알림 스레드가 한다. submit은 큐에 넣고 바로 돌아온다)
         if action == "fire":
-            notifier.send("FIRING", inc, stats=stats, baseline=baseline, probe=p)
+            evidence = make_evidence(cfg, inc, stats, records, baseline, p, now,
+                                     current_rules=[f.rule_id for f in fired], runbooks_text=runbooks_text)
+            dispatcher.submit("FIRING", inc, evidence=evidence, stats=stats, baseline=baseline, probe=p)
         elif should_notify_update(action, inc, cfg.update_grace_sec):
-            notifier.send("UPDATE", inc, stats=stats, baseline=baseline, probe=p, added=added)
+            dispatcher.submit("UPDATE", inc, stats=stats, baseline=baseline, probe=p, added=added)
         elif action == "resolve":
-            notifier.send("RESOLVED", inc)
+            dispatcher.submit("RESOLVED", inc)
 
         # 5. 열린 장애가 없는 NORMAL 창이고 표본이 충분할 때만 기준선에 반영
         if should_update_baseline(action, stats.requests, cfg.min_requests):

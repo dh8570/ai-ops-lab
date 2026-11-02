@@ -27,6 +27,7 @@ MAX_FIRED_RULES = 4
 
 OTHER_PATH = "/기타"
 OTHER_KIND = "기타"
+PREVIOUS_WINDOW_DETAIL = "이전 창에서 켜짐"     # current_rules에 없는 규칙의 detail (정해진 값)
 
 SUMMARY_MAX_CHARS = 300
 ITEM_MAX_CHARS = 200
@@ -62,6 +63,7 @@ _HEX8 = re.compile(r"[0-9A-Fa-f]{8,}")
 _UUID = re.compile(r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}")
 _IPV4 = re.compile(r"[0-9]{1,3}(\.[0-9]{1,3}){3}")
 _KIND_OK = re.compile(r"[A-Za-z_][A-Za-z0-9_.]{0,59}")
+_KIND_SUFFIXES = ("Error", "Exception", "Warning", "Exit", "Interrupt", "Timeout", "Failure")
 _RULE_OK = re.compile(r"R[0-9]{1,2}")
 _HTTP_CODE = re.compile(r"HTTP [0-9]{3}")
 
@@ -81,11 +83,12 @@ def normalize_path(path) -> str:
 
 
 def exception_kind(error_text) -> str:
-    """오류 필드('종류: 메시지')에서 종류만 꺼낸다. 메시지는 어디에도 남기지 않는다."""
+    """오류 필드('종류: 메시지')에서 종류만 꺼낸다. 메시지는 어디에도 남기지 않는다.
+    예외 이름처럼 끝나는 것(…Error, …Exception 등)만 그대로 쓴다. 'Authorization: Bearer x' 같은 머리글은 기타."""
     if not isinstance(error_text, str) or ":" not in error_text:
         return OTHER_KIND
     head = error_text.split(":", 1)[0]
-    return head if _KIND_OK.fullmatch(head) else OTHER_KIND
+    return head if _KIND_OK.fullmatch(head) and head.endswith(_KIND_SUFFIXES) else OTHER_KIND
 
 
 def _reason_code(detail) -> str:
@@ -104,7 +107,7 @@ def estimate_tokens(text: str) -> int:
 
 
 def _system_text(runbooks_text: str) -> str:
-    return SYSTEM_PROMPT_V1 + "\n\n[런북]\n" + runbooks_text
+    return SYSTEM_PROMPT_V1 + ("\n\n" + runbooks_text if runbooks_text else "")   # 런북 블록마다 "[런북] 제목"이 있다
 
 
 def _status_bucket(status) -> str | None:
@@ -178,11 +181,14 @@ def _probe_view(probe):
 
 
 def build_evidence(incident, window_stats, records, baseline, probe, now_ts, *,
-                   window_sec: int = 60, exclude_paths: tuple = ("/healthz",), runbooks_text: str = "") -> dict:
+                   window_sec: int = 60, exclude_paths: tuple = ("/healthz",), runbooks_text: str = "",
+                   current_rules=None) -> dict:
     """장애 하나를 LLM에 보낼 근거 dict로 만든다. 숫자, 건수, 정해진 이름만 담는다.
 
     records=None이면(창 사이에 R4가 켜진 경우) top_* 는 비우고 records_available=False.
     runbooks_text는 토큰 추정에만 쓴다. 추정이 PROMPT_TOKEN_BUDGET을 넘으면 top_paths·top_error_kinds를 줄인다.
+    current_rules=None이면 모든 규칙에 숫자 설명을 붙이고, 목록이면 그 규칙만 숫자 설명을 붙인다
+    (나머지는 이 창의 숫자와 무관하므로 detail을 PREVIOUS_WINDOW_DETAIL로 둔다).
     """
     ws = window_stats
     kinds, paths = _aggregate(records, exclude_paths) if records is not None else (Counter(), {})
@@ -193,6 +199,12 @@ def build_evidence(incident, window_stats, records, baseline, probe, now_ts, *,
     opened = datetime.fromisoformat(incident.opened_at).timestamp()
     rules = sorted({r for r in incident.rules if isinstance(r, str) and _RULE_OK.fullmatch(r)})[:MAX_FIRED_RULES]
     severity = incident.severity if incident.severity in ("warning", "critical") else OTHER_KIND
+    current = None if current_rules is None else set(current_rules)
+
+    def rule_detail(r: str) -> str:
+        if current is not None and r not in current:
+            return PREVIOUS_WINDOW_DETAIL
+        return _fired_rule_detail(r, ws, baseline_rpm, probe_view)
 
     def assemble(max_paths: int, max_kinds: int) -> dict:
         top_kinds = sorted(kinds.items(), key=lambda kv: (-kv[1], kv[0]))[:max_kinds]
@@ -202,8 +214,7 @@ def build_evidence(incident, window_stats, records, baseline, probe, now_ts, *,
                 "id": int(incident.id),
                 "severity": severity,
                 "opened_min_ago": max(0, int((now_ts - opened) // 60)),
-                "fired_rules": [{"rule": r, "detail": _fired_rule_detail(r, ws, baseline_rpm, probe_view)}
-                                for r in rules],
+                "fired_rules": [{"rule": r, "detail": rule_detail(r)} for r in rules],
             },
             "window": {
                 "sec": int(window_sec),
@@ -249,9 +260,10 @@ def render_evidence(ev: dict) -> str:
     lines = [
         "[장애 요약]",
         f"장애 #{inc['id']} · 심각도 {inc['severity']} · 시작 {started} · 켜진 규칙: {rules or '없음'}",
-        f"[최근 {w['sec']}초] 요청 {w['requests']} · 5xx {w['errors_5xx']} · 에러율 {w['error_rate']:.2f}"
-        f" · p95 {w['p95_ms']:.0f}ms · 분당 요청 {w['rpm']:.0f}",
     ]
+    if ev["records_available"]:             # 집계가 없으면 창 통계는 자리표시 0이라 줄을 뺀다(아래 [참고] 줄만 남김)
+        lines.append(f"[최근 {w['sec']}초] 요청 {w['requests']} · 5xx {w['errors_5xx']} · 에러율 {w['error_rate']:.2f}"
+                     f" · p95 {w['p95_ms']:.0f}ms · 분당 요청 {w['rpm']:.0f}")
     b = ev["baseline"]
     if b:
         parts = []
@@ -296,11 +308,12 @@ def load_runbooks(directory) -> str:
 
 
 def build_messages(evidence: dict, runbooks_text: str) -> list[dict]:
-    """system(바뀌지 않는 지시 + 런북)과 user(이번 장애)를 나눠 담는다. 모든 글은 mask()를 거친다."""
+    """system(바뀌지 않는 지시 + 런북)과 user(이번 장애)를 나눠 담는다. mask()는 user 글에만 적용한다.
+    system은 고정 지시와 레포의 런북이라 마스킹하지 않는다(같은 입력이면 같은 system이어야 프리픽스 캐시가 유지된다)."""
     if _prompt_tokens(evidence, runbooks_text) > PROMPT_TOKEN_BUDGET:
         evidence = _shrunk(evidence)
     return [
-        {"role": "system", "content": mask(_system_text(runbooks_text))},
+        {"role": "system", "content": _system_text(runbooks_text)},
         {"role": "user", "content": mask(render_evidence(evidence))},
     ]
 

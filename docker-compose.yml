@@ -55,12 +55,29 @@ services:
       STATE_PATH: /data/watcher.db
       NOTIFY_PROVIDER: ${NOTIFY_PROVIDER:-slack}
       NOTIFY_WEBHOOK_URL: ${NOTIFY_WEBHOOK_URL:-}
+      # --- LLM 분석(A1). 기본값은 모두 "꺼짐·기존 동작". 값은 watcher/config.py의 기본값과 같다 ---
+      OLLAMA_URL: ${WATCHER_OLLAMA_URL:-http://10.97.0.1:11434}   # 서버(controller1)의 Ollama. VM↔서버 통로 주소
+      LLM_ENABLED: ${LLM_ENABLED:-0}                              # 1이면 FIRING 뒤에 AI 분석을 후속 메시지로 보낸다
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}                         # Ollama 모델 이름
+      LLM_CONNECT_TIMEOUT_SEC: ${LLM_CONNECT_TIMEOUT_SEC:-5}      # 연결 제한(초)
+      LLM_TIMEOUT_SEC: ${LLM_TIMEOUT_SEC:-30}                     # 분석 호출 하나의 총 상한(초)
+      LLM_HOLD_SEC: ${LLM_HOLD_SEC:-0}                            # 알림을 붙잡는 시간. 0만 지원(0보다 크면 시작 거부)
+      LLM_KEEP_ALIVE: ${LLM_KEEP_ALIVE:-24h}                      # 모델을 메모리에 유지하는 시간
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0}                      # 샘플링 옵션 7개(요청·기록에 항상 모두 명시)
+      LLM_SEED: ${LLM_SEED:-42}
+      LLM_TOP_K: ${LLM_TOP_K:-40}
+      LLM_TOP_P: ${LLM_TOP_P:-0.9}
+      LLM_REPEAT_PENALTY: ${LLM_REPEAT_PENALTY:-1.0}
+      LLM_NUM_PREDICT: ${LLM_NUM_PREDICT:-512}
+      LLM_NUM_CTX: ${LLM_NUM_CTX:-4096}
+      LLM_TRACE_PATH: ${LLM_TRACE_PATH:-/data/llm_runs.jsonl}     # 분석 실행 기록(JSON Lines). watcher-state 볼륨 안
     volumes:
       - app-logs:/var/log/app:ro
       - watcher-state:/data
     depends_on:
       - app
     restart: unless-stopped
+    stop_grace_period: 15s            # 종료 때 알림 큐를 최대 8초 비운다(기본 10s면 부족할 수 있음)
 
   # 파이프라인 탐험 사이트 S0 (문장 -> 토큰화 -> 읽기·쓰기 -> 복원). 기본 up에는 포함되지 않는다(profile).
   #   실행: docker compose --profile explorer up -d --build explorer

@@ -78,6 +78,7 @@ class Config:
     llm_repeat_penalty: float = _f("LLM_REPEAT_PENALTY", 1.0)
     llm_num_predict: int = _i("LLM_NUM_PREDICT", 512)
     llm_num_ctx: int = _i("LLM_NUM_CTX", 4096)
+    llm_trace_path: str = os.environ.get("LLM_TRACE_PATH", "/data/llm_runs.jsonl")   # 분석 실행 기록(JSON Lines)
 
     def __post_init__(self):
         try:
