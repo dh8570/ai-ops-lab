@@ -14,7 +14,7 @@ RUN python fetch_tokenizer.py /opt/tokenizer/tokenizer.json \
  && chmod 0444 /opt/tokenizer/tokenizer.json
 
 # 3) 앱 코드
-COPY app.py limits.py ollama.py streamparse.py tokenization.py traces.py ./
+COPY app.py limits.py ollama.py runs.py streamparse.py tokenization.py ./
 COPY static ./static
 
 # 비root 사용자(uid 10004). 요청 기록용 /data는 이 사용자가 쓸 수 있게 한다(새 볼륨이 이 소유권을 이어받는다)
@@ -23,7 +23,8 @@ RUN useradd -r -u 10004 explorer \
  && chown explorer /data
 USER explorer
 
-ENV TOKENIZER_PATH=/opt/tokenizer/tokenizer.json TRACE_PATH=/data/traces.jsonl
+# DATA_DIR: 실행 기록(runs/*.json)과 index.json이 쌓이는 곳(볼륨). 옛 traces.jsonl은 더 이상 쓰지 않는다.
+ENV TOKENIZER_PATH=/opt/tokenizer/tokenizer.json DATA_DIR=/data
 EXPOSE 8100
 # -w 1: 'Ollama 호출은 한 번에 하나' 자물쇠가 프로세스 안에 있으므로 워커는 1개. --threads: 스트리밍 중에도 토큰화 요청을 받는다.
 # --timeout: 스트리밍이 길어져도 워커가 죽지 않게 넉넉히

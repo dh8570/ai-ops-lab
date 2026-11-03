@@ -1,0 +1,8 @@
+{
+ "note": "비트 일치 회귀 기준을 정한 환경. 현재 환경이 이와 다르면 비트 불일치는 실패가 아니라 skip(경고)으로 처리한다(baseline.py).",
+ "recorded": "2026-10-29",
+ "torch": "2.14.1+cpu",
+ "transformers": "5.19.0",
+ "cpu_capability": "AVX2",
+ "threads": 6
+}
