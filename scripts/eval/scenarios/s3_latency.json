@@ -16,5 +16,9 @@
     "check_keywords": ["/slow", "지연", "latency", "app", "워커"],
     "forbidden_keywords": ["데이터베이스 장애", "DB 장애", "디스크", "메모리 누수", "DDoS", "공격"],
     "expect_unknown": false
+  },
+  "expect_v2": {
+    "cause_keywords": ["/slow", "느린 요청", "워커", "포화"],
+    "check_keywords": ["/slow", "docker compose logs app", "latency_ms", "워커"]
   }
 }

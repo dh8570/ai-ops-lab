@@ -16,5 +16,8 @@
     "check_keywords": ["로그", "/error", "경로", "app", "docker compose logs"],
     "forbidden_keywords": ["메모리", "CPU", "디스크", "DDoS", "공격", "인증서", "네트워크 장비", "배포"],
     "expect_unknown": false
+  },
+  "expect_v2": {
+    "forbidden_keywords": ["메모리", "CPU", "디스크", "DDoS", "공격", "인증서", "네트워크 장비", "배포", "DB 연결", "데이터베이스 연결", "DB 장애", "데이터베이스 장애"]
   }
 }
