@@ -1,0 +1,19 @@
+{
+  "id": "s5_weak_signal",
+  "title": "오류·지연 없이 요청만 줄어든 약한 신호 (R3)",
+  "ground_truth": "요청 수만 기준선보다 줄었고 오류·지연·프로브는 정상이다. 근거가 부족하므로 원인은 알 수 없음이 정답이다(클라이언트 유입 감소 정도만 말할 수 있다).",
+  "incident": {"id": 1, "severity": "warning", "rules": ["R3"], "opened_min_ago": 3},
+  "current_rules": ["R3"],
+  "records_available": true,
+  "records": [
+    {"path": "/", "status": 200, "count": 120, "latency_ms": 25, "error": null}
+  ],
+  "baseline_rpm": 300,
+  "probe": {"consecutive_failures": 0, "detail": "HTTP 200"},
+  "expect": {
+    "cause_keywords": ["트래픽", "요청", "감소", "클라이언트", "유입", "알 수 없음"],
+    "check_keywords": ["트래픽", "요청", "로그", "클라이언트", "알 수 없음"],
+    "forbidden_keywords": ["DB 장애", "데이터베이스 장애", "메모리", "CPU", "디스크", "DDoS", "앱 정지", "500", "에러율이 높"],
+    "expect_unknown": true
+  }
+}

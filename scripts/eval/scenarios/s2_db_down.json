@@ -1,0 +1,21 @@
+{
+  "id": "s2_db_down",
+  "title": "DB 연결 실패로 / 가 느리게 500을 내는 장애 (R1)",
+  "ground_truth": "/ 가 db 연결에 실패해 3초(연결 대기) 뒤 500(OperationalError)을 낸다. /healthz는 DB를 보지 않아 정상이다. 원인은 db 컨테이너 쪽이다.",
+  "incident": {"id": 1, "severity": "critical", "rules": ["R1"], "opened_min_ago": 2},
+  "current_rules": ["R1"],
+  "records_available": true,
+  "records": [
+    {"path": "/", "status": 500, "count": 300, "latency_ms": 3000, "error": "OperationalError: connection to server failed"},
+    {"path": "/", "status": 200, "count": 20, "latency_ms": 20, "error": null},
+    {"path": "/healthz", "status": 200, "count": 15, "latency_ms": 2, "error": null}
+  ],
+  "baseline_rpm": 300,
+  "probe": {"consecutive_failures": 0, "detail": "HTTP 200"},
+  "expect": {
+    "cause_keywords": ["DB", "db", "데이터베이스", "연결", "OperationalError"],
+    "check_keywords": ["db", "DB", "데이터베이스", "docker compose ps", "logs db"],
+    "forbidden_keywords": ["메모리 부족", "CPU", "디스크", "DDoS", "공격", "인증서"],
+    "expect_unknown": false
+  }
+}
