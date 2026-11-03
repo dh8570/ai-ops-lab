@@ -60,7 +60,8 @@ REPORT_SETTINGS = (("prod", 3), ("warm", 3), ("var", 5))      # 표에 보이는
 MAX_CONSECUTIVE_FAILS = 5
 SYNTHETIC_NOTE = "시나리오 숫자는 합성이며 실측이 아니다."
 ITEMS = (("형식", "format_ok"), ("언어", "language_ok"), ("원인", "cause_ok"), ("확인", "check_ok"),
-         ("환각 없음", "no_hallucination"), ("통과", "passed"), ("엄격 통과", "strict_passed"))
+         ("환각 없음", "no_hallucination"), ("통과", "passed"), ("엄격 통과", "strict_passed"),
+         ("엄격 v3 통과", "strict_v3_passed"))
 
 
 # ---------------------------------------------------------------- 시나리오와 프롬프트
@@ -239,6 +240,13 @@ def render_scoreboard(meta: dict, records: list, scenarios: list) -> str:
                 [(i, *(_frac(_sel(records, scenario=i, condition=c, setting=s), "strict_passed")
                        for c, s, _ in cols)) for i in ids]
                 + [("합계", *(_frac(_sel(records, condition=c, setting=s), "strict_passed") for c, s, _ in cols))])
+
+    L += ["", "## ①-3 엄격 v3 통과율 (엄격 통과 + 규칙 이름 되풀이 0개 + s5는 \"알 수 없음\" 필수)", ""]
+    L += _table(["시나리오", *(f"{c} {s}({n}회)" for c, s, n in cols)],
+                [(i, *(_frac(_sel(records, scenario=i, condition=c, setting=s), "strict_v3_passed")
+                       for c, s, _ in cols)) for i in ids]
+                + [("합계", *(_frac(_sel(records, condition=c, setting=s), "strict_v3_passed")
+                              for c, s, _ in cols))])
 
     L += ["", "## ② 항목별 통과 수 (전체 시나리오 합)", "",
           "원인·통과는 s5(expect_unknown)에서 통과 판정에 unknown_ok를 쓴다. 원인 열은 s5도 cause_ok 그대로 센다.", ""]

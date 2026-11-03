@@ -4,7 +4,8 @@
 호출 실패(None)나 형식 오류는 모든 항목이 거짓이다. 호출 통계(wall_ms 등)는 점수와 따로 기록하므로 여기에 없다.
 
 T5b 추가: 숫자 경계 비교(invented_numbers), 원인별 지지 여부(cause_matches·unsupported_causes·strict_passed),
-키워드 v2(with_keywords), 규칙 되풀이 원인 수(rule_echo_causes, 보고용). passed의 규칙(v1)은 바뀌지 않는다.
+키워드 v2(with_keywords), 규칙 되풀이 원인 수(rule_echo_causes, 보고용).
+T5c 추가: strict_v3_passed. passed의 규칙(v1)은 바뀌지 않는다.
 """
 import re
 
@@ -65,7 +66,8 @@ def score_answer(scenario: dict, parsed, evidence_text: str, runbooks_text: str)
     score = {"format_ok": ok, "language_ok": False, "cause_ok": False, "check_ok": False,
              "forbidden_hits": [], "no_hallucination": False, "invented_numbers": [],
              "unknown_ok": False if expect_unknown else None, "passed": False,
-             "cause_matches": 0, "unsupported_causes": 0, "strict_passed": False, "rule_echo_causes": 0}
+             "cause_matches": 0, "unsupported_causes": 0, "strict_passed": False, "rule_echo_causes": 0,
+             "strict_v3_passed": False}
     if not ok:
         return score
 
@@ -89,5 +91,8 @@ def score_answer(scenario: dict, parsed, evidence_text: str, runbooks_text: str)
     score["passed"] = bool(score["format_ok"] and score["language_ok"] and cause_part
                            and score["check_ok"] and score["no_hallucination"])
     score["strict_passed"] = score["passed"] and score["unsupported_causes"] == 0
-    score["rule_echo_causes"] = sum(1 for c in parsed.causes if _RULE_NAME.search(c))      # 보고용. 판정에 안 쓴다
+    score["rule_echo_causes"] = sum(1 for c in parsed.causes if _RULE_NAME.search(c))      # 보고용. passed에 안 쓴다
+    # strict_v3(T5c): strict이고 규칙 이름 되풀이 원인이 없고, expect_unknown이면 답에 "알 수 없음"이 있다
+    score["strict_v3_passed"] = bool(score["strict_passed"] and score["rule_echo_causes"] == 0
+                                     and (not expect_unknown or any(UNKNOWN_MARK in t for t in texts)))
     return score

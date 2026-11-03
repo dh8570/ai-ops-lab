@@ -19,7 +19,10 @@ v1 raw 파일(`docs/eval/raw/eval-20261103T043035Z.jsonl`)의 prod 1번 호출 1
 
 ## 자동 판정과 어긋난 칸
 
+목록 기준: 자동 통과인데 사람 판정이 '좋음(정확성 2 그리고 유용성 2)'이 아닌 칸.
+
 - s3_latency / no_runbook
 - s5_weak_signal / no_runbook
 - s1_error_spike / runbook
 - s5_weak_signal / runbook
+- s2_db_down / runbook (자동 통과, 사람 정확성 1·유용성 2: 둘째 원인 "앱이 시작되지 않은 것"이 근거와 모순)

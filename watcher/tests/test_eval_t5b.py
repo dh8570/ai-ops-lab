@@ -467,3 +467,40 @@ def test_table_2_shows_rule_echo_row():
     md = run_eval.render_scoreboard(t5a.META, records, _scenarios(["s1"]))
     sect2 = md.split("## ②")[1].split("## ③")[0]
     assert "| 규칙 이름 되풀이 원인(R1~R4, 보고용: 호출 수/원인 수) | 1/1 | 0/0 | 0/0 | 0/0 |" in sect2
+
+
+# ---------------------------------------------------------------- T5c: strict_v3
+
+@pytest.mark.parametrize("sid", ALL_IDS)
+def test_good_answers_are_strict_v3_passed(sid):
+    assert _score(sid, GOOD_ALL[sid])["strict_v3_passed"] is True
+
+
+def test_strict_v3_blocks_rule_echo_cause_that_strict_lets_through():
+    ans = dict(t5a.GOOD["s1_error_spike"], causes=["/error 예외다.", "R1이 켜졌으므로 에러율이 높다(에러 /error)."])
+    s = _score("s1_error_spike", ans)
+    assert s["rule_echo_causes"] == 1
+    assert s["strict_passed"] is True and s["strict_v3_passed"] is False
+
+
+def test_strict_v3_requires_unknown_mark_for_expect_unknown_scenario():
+    sid = "s5_weak_signal"
+    ans = dict(GOOD_ALL[sid], summary="요청이 줄었다.", causes=["트래픽이 감소했다.", "클라이언트 유입이 줄었다."],
+               checks=["트래픽 추세를 본다.", "요청 로그를 본다."])
+    s = _score(sid, ans)
+    assert s["strict_passed"] is True and s["strict_v3_passed"] is False
+    s = _score(sid, dict(ans, checks=["트래픽 추세를 본다.", "원인은 알 수 없음으로 남긴다."]))
+    assert s["strict_v3_passed"] is True
+
+
+def test_strict_v3_is_false_when_strict_is_false_and_for_failed_parse():
+    ans = dict(t5a.GOOD["s1_error_spike"], causes=["/error 경로가 RuntimeError 예외를 낸다.", "서버 설정이 이상하다."])
+    assert _score("s1_error_spike", ans)["strict_v3_passed"] is False
+    assert _score("s1_error_spike", "JSON이 아니다")["strict_v3_passed"] is False
+
+
+def test_strict_v3_table_rows_are_present():
+    records, _ = _run(["s1"], Chat())
+    md = run_eval.render_scoreboard(t5a.META, records, _scenarios(["s1"]))
+    assert "## ①-3 엄격 v3 통과율" in md
+    assert "| 엄격 v3 통과 |" in md.split("## ②")[1].split("## ③")[0]
