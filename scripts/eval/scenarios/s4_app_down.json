@@ -1,0 +1,17 @@
+{
+  "id": "s4_app_down",
+  "title": "앱이 응답하지 않아 프로브가 연속 실패한 장애 (R4, 로그 집계 없음)",
+  "ground_truth": "app 컨테이너가 정지했거나 재시작 중이라 /healthz에 응답이 없다. 로그 집계가 없으므로 에러율·지연 같은 숫자를 근거로 삼으면 안 된다.",
+  "incident": {"id": 1, "severity": "critical", "rules": ["R4"], "opened_min_ago": 1},
+  "current_rules": ["R4"],
+  "records_available": false,
+  "records": [],
+  "baseline_rpm": 300,
+  "probe": {"consecutive_failures": 2, "detail": "gaierror"},
+  "expect": {
+    "cause_keywords": ["app", "앱", "컨테이너", "정지", "재시작", "프로브", "응답"],
+    "check_keywords": ["docker compose ps", "app", "컨테이너", "logs", "db"],
+    "forbidden_keywords": ["에러율", "5xx 비율", "/error", "/slow", "p95"],
+    "expect_unknown": false
+  }
+}
