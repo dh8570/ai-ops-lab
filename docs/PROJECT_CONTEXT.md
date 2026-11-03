@@ -10,7 +10,7 @@
 - 원칙: AI 우선(인프라는 AI 단계를 막을 때만 최소로), 매주 "AI 질문 세 가지"와 채점표·비교표 1개 이상, 모르는 것은 질문하며 배운다(용어는 docs/glossary.md).
 - 계획과 주별 상세는 `docs/plan/ai-first-4weeks.md`가 유일한 원본이다.
 - (구버전) 24주 로드맵(워킹 스켈레톤 후 ELK·Ansible·Prometheus·Airflow·Terraform·OCI 등으로 교체)은 2026-10-27에 4주 AI 우선 계획으로 대체했다.
-- 설계 그림: `docs/figures/` (Fig 2·5는 v0.3, 2026-10-27. Fig 1·3·4는 v0.2. Fig 3·4는 A주 설계 결정 뒤에 고친다).
+- 설계 그림: `docs/figures/` (Fig 2는 v0.3 2026-10-27, Fig 5는 v0.4 2026-11-02. Fig 1·3·4는 v0.2. Fig 3·4는 A주 설계 결정 뒤에 고친다).
 
 ## 2. 환경
 
@@ -115,7 +115,8 @@ docker compose stop app; (2분 뒤) docker compose start app                    
 - 알림 실패 원인 기록 보강 (PR #5 병합)
 - 탐험 사이트 S0 병합 (PR #7)
 - 현미경 엔진 스파이크 통과: Qwen2.5-7B bf16을 VM CPU에서 실행, Prefill 9.3초(72토큰), Decode 0.66초/토큰, 메모리 14.7GiB
-- **현재: A주 시작** (2026-10-27). 세부는 `docs/plan/ai-first-4weeks.md`
+- 현미경 엔진 M2-a·M2-b: Prefill·Decode가 HF eager와 비트 단위로 일치(PR #12 병합)
+- **현재: A주 연장 중** (2026-11-02에 11/5까지 연장. 이유: LLM 알림이 A주 안에 끝나지 않음). 세부는 `docs/plan/ai-first-4weeks.md`
 
 ## 5. 다음 할 일
 
