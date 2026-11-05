@@ -1,0 +1,19 @@
+{
+  "id": "s14_probe_refused",
+  "title": "프로브가 연결 거부로 실패, 로그 집계 없음 (R4, 보류 2)",
+  "ground_truth": "연결이 거부되었으므로 app 프로세스가 떠 있지 않다(정지 또는 시작 중). 로그 집계가 없으므로 에러율·지연 숫자를 근거로 삼으면 안 된다.",
+  "incident": {"id": 1, "severity": "critical", "rules": ["R4"], "opened_min_ago": 2},
+  "current_rules": ["R4"],
+  "records_available": false,
+  "records": [],
+  "baseline_rpm": 300,
+  "probe": {"consecutive_failures": 2, "detail": "ConnectionRefusedError"},
+  "expect": {
+    "cause_keywords": ["app", "앱", "컨테이너", "정지", "재시작", "시작"],
+    "check_keywords": ["docker compose ps", "docker compose logs app", "app", "컨테이너"],
+    "forbidden_keywords": ["에러율", "5xx 비율", "p95", "/error", "/slow", "포화"],
+    "expect_unknown": false
+  },
+  "holdout": true,
+  "holdout_set": 2
+}

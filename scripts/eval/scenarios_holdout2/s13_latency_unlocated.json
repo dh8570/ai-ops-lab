@@ -1,0 +1,21 @@
+{
+  "id": "s13_latency_unlocated",
+  "title": "한 경로 전체가 느리지만 원인을 정할 수 없는 지연 (R2, 보류 2)",
+  "ground_truth": "한 경로의 모든 요청이 느리고 오류·프로브는 정상이다. 지연의 원인을 근거만으로 단정할 수 없다(알 수 없음이 정답).",
+  "incident": {"id": 1, "severity": "warning", "rules": ["R2"], "opened_min_ago": 2},
+  "current_rules": ["R2"],
+  "records_available": true,
+  "records": [
+    {"path": "/", "status": 200, "count": 150, "latency_ms": 2600, "error": null}
+  ],
+  "baseline_rpm": 300,
+  "probe": {"consecutive_failures": 0, "detail": "HTTP 200"},
+  "expect": {
+    "cause_keywords": ["지연", "느린", "응답", "워커", "알 수 없음"],
+    "check_keywords": ["docker compose logs app", "latency_ms", "로그", "app"],
+    "forbidden_keywords": ["앱 정지", "메모리 누수", "디스크", "DDoS", "공격", "/slow", "DB 장애", "데이터베이스 장애", "5xx", "에러율"],
+    "expect_unknown": true
+  },
+  "holdout": true,
+  "holdout_set": 2
+}
