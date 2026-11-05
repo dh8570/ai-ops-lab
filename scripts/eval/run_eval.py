@@ -16,6 +16,10 @@ watcher는 수정하지 않고 Slack 등 알림은 보내지 않는다.
     python3 scripts/eval/run_eval.py --with-holdout --keywords v2 --settings warm,var \\
         --conditions nr_v1,all_v1,all_v2,match_v1,match_v2
 
+    # T6b: 프롬프트 v3·스키마 완화 비교(새 보류 시나리오 s12~s15 포함). 405번 호출
+    python3 scripts/eval/run_eval.py --with-holdout --with-holdout2 --keywords v2 --settings warm,var \\
+        --conditions all_v1,all_v2,all_v3
+
 조건 이름: no_runbook = nr_v1, runbook = all_v1(기존 이름의 별칭, 기록에는 준 이름 그대로 남긴다).
 정의는 variants.CONDITIONS.
 
@@ -56,6 +60,7 @@ EXCLUDE_PATHS = ("/healthz",)
 SCENARIO_DIR = HERE / "scenarios"                 # T5a 시나리오 5개(기준선. 바꾸지 않는다)
 EXTRA_SCENARIO_DIR = HERE / "scenarios_extra"     # T5b 추가 시나리오(s6, s7)
 HOLDOUT_DIR = HERE / "scenarios_holdout"          # T6a 보류 시나리오(s8~s11). --with-holdout일 때만 합친다
+HOLDOUT2_DIR = HERE / "scenarios_holdout2"        # T6b 새 보류 시나리오(s12~s15). --with-holdout2일 때만 합친다
 CONDITIONS = ("no_runbook", "runbook")            # 기본 조건(T5)
 CONDITION_ALIASES = {"no_runbook": "nr_v1", "runbook": "all_v1"}
 # (설정 이름, 반복 번호, 옵션 덮어쓰기). prod는 운영 기본값 3번(재현성), var는 temperature 0.2에 seed 1~5.
@@ -68,6 +73,7 @@ SETTINGS_V2 = ([("prod", i, {}) for i in range(1, 4)] + [("warmup", 1, {})] + [(
 SETTING_NAMES = ("prod", "warmup", "warm", "var")
 REPORT_SETTINGS = (("prod", 3), ("warm", 3), ("var", 5))      # 표에 보이는 설정과 설정별 반복 수(warmup은 없음)
 MAX_CONSECUTIVE_FAILS = 5
+PLACEHOLDER = "알 수 없음: 이유"                  # v2 프롬프트 예시 문구. 응답에 그대로 있으면 자리표시 복사
 SYNTHETIC_NOTE = "시나리오 숫자는 합성이며 실측이 아니다."
 ITEMS = (("형식", "format_ok"), ("언어", "language_ok"), ("원인", "cause_ok"), ("확인", "check_ok"),
          ("환각 없음", "no_hallucination"), ("통과", "passed"), ("엄격 통과", "strict_passed"),
@@ -208,16 +214,20 @@ def run_all(scenarios, runbooks_text, *, chat, url, model, cfg, keep_alive, conn
             rb = runbook_text_for(mode, sc, runbooks_text, blocks)
             _, messages, _ = build_prompt(sc, rb, now_ts, prompt)
             system, evidence_text = messages[0]["content"], messages[1]["content"]
+            schema = variants.schema_for(prompt)
             for setting, rep, override in settings:
                 options = dispatcher.options_from(cfg, **override)
-                result = chat(url, model, messages, options, fmt=analysis.ANALYSIS_SCHEMA, keep_alive=keep_alive,
+                result = chat(url, model, messages, options, fmt=schema, keep_alive=keep_alive,
                               connect_timeout=connect_timeout, total_timeout=total_timeout)
-                parsed = analysis.parse_answer(result.text) if result.ok else None
+                parsed = variants.parse_answer_variant(result.text, schema) if result.ok else None
                 rec = {"scenario": sc["id"], "condition": cond, "setting": setting, "rep": rep,
                        "model": model, "options": options.as_dict(), "system_sha256": _sha256(system),
                        "est_prompt_tokens": estimate_prompt_tokens(messages),
                        "prompt_version": prompt, "runbook_mode": mode, "runbook_chars": len(rb),
-                       "holdout": bool(sc.get("holdout")),
+                       "holdout": bool(sc.get("holdout")), "schema": "v3" if prompt == "v3" else "v1",
+                       "n_causes": len(parsed.causes) if parsed and parsed.ok else None,
+                       "n_checks": len(parsed.checks) if parsed and parsed.ok else None,
+                       "placeholder_copy": PLACEHOLDER in (result.text or ""),
                        "ok": result.ok, "fail_reason": result.reason, "done_reason": result.done_reason,
                        "http_status": result.http_status, "text": result.text,
                        "parsed": _parsed_dict(parsed),
@@ -290,6 +300,8 @@ def render_scoreboard(meta: dict, records: list, scenarios: list) -> str:
                      f"{meta['keep_alive']} / {meta['connect_timeout']:g}·{meta['total_timeout']:g}"))
     if compare:
         info.append(("SYSTEM_PROMPT_V2 sha256", meta["system_sha256_v2"]))
+        if "system_sha256_v3" in meta:
+            info.append(("SYSTEM_PROMPT_V3 sha256", meta["system_sha256_v3"]))
         info.append(("조건", ", ".join(f"{c}={'/'.join(condition_spec(c))}" for c in conds)))
     info += [("런북", f"{meta['runbook_chars']}자 (전체 런북. 런북 all 조건에서 사용, match는 규칙에 맞는 블록만)"
               if compare else f"{meta['runbook_chars']}자 (조건 runbook에서만 사용)"),
@@ -402,48 +414,40 @@ def render_scoreboard(meta: dict, records: list, scenarios: list) -> str:
             L += ["- 정확성 0~2: ____ / 유용성 0~2: ____", ""]
     if compare:
         L += _compare_tables(records, scenarios, conds)
+    if meta.get("compare_t6b"):
+        L += _t6b_tables(records, scenarios, conds)
     if any("score_recorded" in r for r in records):
         L += _recorded_diff(records, "⑪" if compare else "⑦")
     return "\n".join(L) + "\n"
 
 
-def _compare_tables(records, scenarios, conds) -> list:
-    """T6a 비교표 ⑦~⑩. warmup은 항상 빠진다(setting을 warm, var로 지정해서 센다)."""
-    design = [s["id"] for s in scenarios if not s.get("holdout")]
-    holdout = [s["id"] for s in scenarios if s.get("holdout")]
+def _set_of(sc) -> str:
+    """시나리오의 묶음: design(설계), holdout1(T6a 보류, 결과를 이미 봄), holdout2(T6b 새 보류)."""
+    if not sc.get("holdout"):
+        return "design"
+    return "holdout2" if sc.get("holdout_set", 1) == 2 else "holdout1"
+
+
+def _pooled(records, c, ids, key) -> str:
+    """warm과 var를 합친 통과 수. warmup은 항상 빠진다."""
+    rows = [r for r in records if r["condition"] == c and r["scenario"] in ids and r["setting"] in ("warm", "var")]
+    return _frac(rows, key) if ids else "-"
+
+
+def _strict_table(records, scenarios, conds) -> list:
+    """시나리오 x 조건 strict_v3 통과율(warm 3회, var 5회 각각)."""
     counted = ("warm", "var")
+    label = {"design": "", "holdout1": " (보류)", "holdout2": " (보류 2)"}
+    return _table(["시나리오", *(f"{c} {s}" for c in conds for s in counted)],
+                  [(sc["id"] + label[_set_of(sc)],
+                    *(_frac(_sel(records, scenario=sc["id"], condition=c, setting=s), "strict_v3_passed")
+                      for c in conds for s in counted)) for sc in scenarios])
 
-    def pooled(c, ids, key):
-        rows = [r for r in records if r["condition"] == c and r["scenario"] in ids and r["setting"] in counted]
-        return _frac(rows, key) if ids else "-"
 
-    L = ["", "## ⑦ 조건 x 시나리오 묶음 통과 수 (warm과 var 합침)", "",
-         f"설계 시나리오 {len(design)}개, 보류 시나리오 {len(holdout)}개. "
-         "v1 규칙은 passed, strict_v3는 엄격 v3 통과다.", ""]
-    L += _table(["조건", "설계 passed", "설계 strict_v3", "보류 passed", "보류 strict_v3"],
-                [(c, pooled(c, design, "passed"), pooled(c, design, "strict_v3_passed"),
-                  pooled(c, holdout, "passed"), pooled(c, holdout, "strict_v3_passed")) for c in conds])
-
-    L += ["", "## ⑧ 시나리오 x 조건 strict_v3 통과율 (warm 3회, var 5회)", ""]
-    header = ["시나리오", *(f"{c} {s}" for c in conds for s in counted)]
-    L += _table(header, [(sc["id"] + (" (보류)" if sc.get("holdout") else ""),
-                          *(_frac(_sel(records, scenario=sc["id"], condition=c, setting=s), "strict_v3_passed")
-                            for c in conds for s in counted)) for sc in scenarios])
-
-    L += ["", "## ⑨ 조건별 prompt 토큰·시간 평균 (warmup 제외)", ""]
-    rows = []
-    for c in conds:
-        rs = [r for r in records if r["condition"] == c and r["setting"] != "warmup"]
-        rows.append((c, len(rs), _fmt(_mean([r.get("est_prompt_tokens") for r in rs])),
-                     _fmt(_mean([r["stats"]["prompt_eval_count"] for r in rs])),
-                     _fmt(_mean([r["stats"]["prompt_eval_cached_count"] for r in rs])),
-                     _fmt(_mean([r["stats"]["wall_ms"] for r in rs]))))
-    L += _table(["조건", "호출", "추정 토큰 평균", "prompt 토큰 평균", "캐시 재사용 평균", "wall_ms 평균"], rows)
-
-    L += ["", "## ⑩ 사람이 볼 시트 (보류 시나리오 x 조건, warm 1번 호출의 답. 자동 판정은 적지 않음)", ""]
+def _answer_sheet(records, scenarios, conds) -> list:
+    """시나리오 x 조건마다 warm 1번 호출의 답 전문과 빈 채점 칸. 자동 판정 줄은 적지 않는다."""
+    L: list = []
     for sc in scenarios:
-        if not sc.get("holdout"):
-            continue
         for c in conds:
             first = next(iter(_sel(records, scenario=sc["id"], condition=c, setting="warm", rep=1)), None)
             L += [f"### {sc['id']} / {c}", f"- 제목: {sc['title']}", f"- 정답 설명: {sc['ground_truth']}"]
@@ -457,6 +461,77 @@ def _compare_tables(records, scenarios, conds) -> list:
                 L += [f"- 요약: {p['summary']}", "- 원인 후보:", *(f"  {n}. {t}" for n, t in enumerate(p["causes"], 1)),
                       "- 확인할 항목:", *(f"  {n}. {t}" for n, t in enumerate(p["checks"], 1))]
             L += ["- 정확성 0~2: ____ / 유용성 0~2: ____", ""]
+    return L
+
+
+def _compare_tables(records, scenarios, conds) -> list:
+    """T6a 비교표 ⑦~⑩. 설계 시나리오와 T6a 보류(s8~s11)만 센다(T6b의 새 보류는 ⑫~⑮)."""
+    design = [s["id"] for s in scenarios if _set_of(s) == "design"]
+    holdout = [s["id"] for s in scenarios if _set_of(s) == "holdout1"]
+
+    L = ["", "## ⑦ 조건 x 시나리오 묶음 통과 수 (warm과 var 합침)", "",
+         f"설계 시나리오 {len(design)}개, 보류 시나리오 {len(holdout)}개. "
+         "v1 규칙은 passed, strict_v3는 엄격 v3 통과다.", ""]
+    L += _table(["조건", "설계 passed", "설계 strict_v3", "보류 passed", "보류 strict_v3"],
+                [(c, _pooled(records, c, design, "passed"), _pooled(records, c, design, "strict_v3_passed"),
+                  _pooled(records, c, holdout, "passed"), _pooled(records, c, holdout, "strict_v3_passed"))
+                 for c in conds])
+
+    L += ["", "## ⑧ 시나리오 x 조건 strict_v3 통과율 (warm 3회, var 5회)", ""]
+    L += _strict_table(records, scenarios, conds)
+
+    L += ["", "## ⑨ 조건별 prompt 토큰·시간 평균 (warmup 제외)", ""]
+    rows = []
+    for c in conds:
+        rs = [r for r in records if r["condition"] == c and r["setting"] != "warmup"]
+        rows.append((c, len(rs), _fmt(_mean([r.get("est_prompt_tokens") for r in rs])),
+                     _fmt(_mean([r["stats"]["prompt_eval_count"] for r in rs])),
+                     _fmt(_mean([r["stats"]["prompt_eval_cached_count"] for r in rs])),
+                     _fmt(_mean([r["stats"]["wall_ms"] for r in rs]))))
+    L += _table(["조건", "호출", "추정 토큰 평균", "prompt 토큰 평균", "캐시 재사용 평균", "wall_ms 평균"], rows)
+
+    L += ["", "## ⑩ 사람이 볼 시트 (보류 시나리오 x 조건, warm 1번 호출의 답. 자동 판정은 적지 않음)", ""]
+    L += _answer_sheet(records, [s for s in scenarios if _set_of(s) == "holdout1"], conds)
+    return L
+
+
+def _t6b_tables(records, scenarios, conds) -> list:
+    """T6b 비교표 ⑫~⑮ (⑦~⑪과 번호가 겹치지 않는다)."""
+    groups = [("설계", [s["id"] for s in scenarios if _set_of(s) == "design"]),
+              ("본 데이터 s8~s11 (T6a에서 결과를 이미 봄)", [s["id"] for s in scenarios if _set_of(s) == "holdout1"]),
+              ("새 보류 s12~s15", [s["id"] for s in scenarios if _set_of(s) == "holdout2"])]
+    L = ["", "## ⑫ 조건 x 시나리오 묶음 통과 수 (warm과 var 합침)", "",
+         "본 데이터(s8~s11)는 T6a에서 결과를 이미 본 시나리오라 판단 근거로 약하다. "
+         "새 보류(s12~s15)가 이번 실험의 새 증거다.", ""]
+    header = ["조건"]
+    for name, _ in groups:
+        header += [f"{name} passed", f"{name} strict_v3"]
+    rows = []
+    for c in conds:
+        row = [c]
+        for _, ids in groups:
+            row += [_pooled(records, c, ids, "passed"), _pooled(records, c, ids, "strict_v3_passed")]
+        rows.append(row)
+    L += _table(header, rows)
+
+    L += ["", "## ⑬ 조건별 형식·원인 수 (warm과 var, warmup 제외)", "",
+          "원인 1개 답은 원인 후보가 정확히 1개인 답. "
+          f"placeholder_copy는 응답에 \"{PLACEHOLDER}\"가 그대로 있는 호출.", ""]
+    rows = []
+    for c in conds:
+        rs = [r for r in records if r["condition"] == c and r["setting"] in ("warm", "var")]
+        ok_rs = [r for r in rs if r.get("n_causes") is not None]
+        rows.append((c, len(rs), _frac(rs, "format_ok"), _fmt(_mean([r["n_causes"] for r in ok_rs]), 2),
+                     _fmt(_mean([r["n_checks"] for r in ok_rs]), 2),
+                     sum(1 for r in ok_rs if r["n_causes"] == 1), sum(1 for r in rs if r.get("placeholder_copy"))))
+    L += _table(["조건", "호출", "형식 통과(format_ok)", "평균 원인 수", "평균 확인 수", "원인 1개 답",
+                 "placeholder_copy"], rows)
+
+    L += ["", "## ⑭ 시나리오 x 조건 strict_v3 통과율 (warm 3회, var 5회)", ""]
+    L += _strict_table(records, scenarios, conds)
+
+    L += ["", "## ⑮ 사람이 볼 시트 (새 보류 s12~s15 x 조건, warm 1번 호출의 답. 자동 판정은 적지 않음)", ""]
+    L += _answer_sheet(records, [s for s in scenarios if _set_of(s) == "holdout2"], conds)
     return L
 
 
@@ -549,7 +624,7 @@ def rescore(rows, scenarios, runbooks_text, blocks=None) -> list:
         prompt, mode = condition_spec(row["condition"])
         rb = runbook_text_for(mode, sc, runbooks_text, blocks)
         _, messages, _ = build_prompt(sc, rb, NOW_TS, prompt)
-        parsed = analysis.parse_answer(row["text"]) if row["ok"] else None
+        parsed = variants.parse_answer_variant(row["text"], variants.schema_for(prompt)) if row["ok"] else None
         out_rows.append({**row, "score_recorded": row["score"], "parsed": _parsed_dict(parsed),
                          "score": scoring.score_answer(sc, parsed, messages[1]["content"], rb)})
     return out_rows
@@ -577,6 +652,8 @@ def main(argv=None, *, chat=llm_client.chat, version=llm_client.version, out=pri
     ap.add_argument("--settings", default=None, help="쉼표로 구분한 설정(예: warm,var). 기본 전체, warm은 warmup 포함")
     ap.add_argument("--holdout", default=str(HOLDOUT_DIR), help="보류 시나리오 폴더(--with-holdout일 때만 쓴다)")
     ap.add_argument("--with-holdout", action="store_true", help="보류 시나리오(s8~s11)를 시나리오에 합친다")
+    ap.add_argument("--holdout2", default=str(HOLDOUT2_DIR), help="새 보류 시나리오 폴더(--with-holdout2일 때만 쓴다)")
+    ap.add_argument("--with-holdout2", action="store_true", help="새 보류 시나리오(s12~s15)를 시나리오에 합친다")
     args = ap.parse_args(argv)
 
     try:
@@ -585,6 +662,10 @@ def main(argv=None, *, chat=llm_client.chat, version=llm_client.version, out=pri
             if not Path(args.holdout).is_dir():
                 raise ValueError(f"보류 시나리오 폴더가 없다: {args.holdout}")
             dirs.append(args.holdout)
+        if args.with_holdout2:
+            if not Path(args.holdout2).is_dir():
+                raise ValueError(f"새 보류 시나리오 폴더가 없다: {args.holdout2}")
+            dirs.append(args.holdout2)
         scenarios = load_scenarios(dirs, [o for o in args.only.split(",") if o], args.keywords)
         conditions = parse_conditions(args.conditions)
         if args.settings:
@@ -605,9 +686,12 @@ def main(argv=None, *, chat=llm_client.chat, version=llm_client.version, out=pri
     base_meta = {"started_utc": stamp, "prompt_version": analysis.PROMPT_VERSION,
                  "system_sha256": _sha256(analysis.SYSTEM_PROMPT_V1), "runbook_chars": len(runbooks_text),
                  "keywords": args.keywords, "aborted": False}
-    if args.conditions or args.with_holdout:     # T6a 비교 실행이면 점수판에 비교표 ⑦~⑩을 더한다
+    if args.conditions or args.with_holdout or args.with_holdout2:     # 비교 실행이면 점수판에 비교표 ⑦~⑩을 더한다
         base_meta.update(compare=True, system_sha256_v2=_sha256(variants.SYSTEM_PROMPT_V2),
                          title="# 장애 분석 비교 채점표 (A1-T6a)")
+    if args.with_holdout2 or any(condition_spec(c)[0] == "v3" for c in conditions):     # T6b이면 ⑫~⑮도 더한다
+        base_meta.update(compare_t6b=True, system_sha256_v3=_sha256(variants.SYSTEM_PROMPT_V3),
+                         title="# 장애 분석 비교 채점표 (A1-T6b)")
 
     if args.rescore:
         return _main_rescore(args, scenarios, runbooks_text, blocks, base_meta, out_dir, stamp, out)

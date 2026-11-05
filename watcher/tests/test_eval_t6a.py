@@ -52,7 +52,8 @@ def test_system_prompt_v2_is_pinned():
 
 def test_conditions_table():
     assert variants.CONDITIONS == {"nr_v1": ("v1", "none"), "all_v1": ("v1", "all"), "all_v2": ("v2", "all"),
-                                   "match_v1": ("v1", "match"), "match_v2": ("v2", "match")}
+                                   "match_v1": ("v1", "match"), "match_v2": ("v2", "match"),
+                                   "all_v3": ("v3", "all")}
 
 
 @pytest.mark.parametrize("rb", ["", "[런북] 제목\n본문"])
@@ -94,7 +95,7 @@ def test_variant_v2_shrinks_evidence_over_budget():
 
 def test_variant_unknown_prompt_rejected():
     with pytest.raises(ValueError):
-        variants.build_messages_variant(_evidence(_all(["s1"])[0]), "", "v3")
+        variants.build_messages_variant(_evidence(_all(["s1"])[0]), "", "v4")
 
 
 def test_blocks_join_equals_load_runbooks(blocks, runbooks_text):
