@@ -1,0 +1,18 @@
+{
+  "id": "s11_probe_timeout",
+  "title": "프로브 timeout, 로그 집계 없음 (R4, 보류)",
+  "ground_truth": "앱이 응답하지 않는다(정지 또는 느린 요청으로 워커 포화). 로그 집계가 없으므로 에러율·지연 숫자를 근거로 삼으면 안 된다.",
+  "incident": {"id": 1, "severity": "critical", "rules": ["R4"], "opened_min_ago": 2},
+  "current_rules": ["R4"],
+  "records_available": false,
+  "records": [],
+  "baseline_rpm": 300,
+  "probe": {"consecutive_failures": 2, "detail": "timeout"},
+  "expect": {
+    "cause_keywords": ["app", "앱", "컨테이너", "정지", "워커", "포화", "응답"],
+    "check_keywords": ["docker compose ps", "app", "컨테이너", "logs"],
+    "forbidden_keywords": ["에러율", "5xx 비율", "/error", "p95"],
+    "expect_unknown": false
+  },
+  "holdout": true
+}

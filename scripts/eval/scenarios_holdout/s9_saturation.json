@@ -1,0 +1,21 @@
+{
+  "id": "s9_saturation",
+  "title": "/slow가 워커를 붙잡아 처리량이 줄어든 포화 (R2+R3, 보류)",
+  "ground_truth": "/slow 요청이 sync 워커를 붙잡아 다른 요청이 대기하고 처리량이 줄었다.",
+  "incident": {"id": 1, "severity": "warning", "rules": ["R2", "R3"], "opened_min_ago": 2},
+  "current_rules": ["R2", "R3"],
+  "records_available": true,
+  "records": [
+    {"path": "/slow", "status": 200, "count": 25, "latency_ms": 6000, "error": null},
+    {"path": "/", "status": 200, "count": 50, "latency_ms": 3500, "error": null}
+  ],
+  "baseline_rpm": 300,
+  "probe": {"consecutive_failures": 0, "detail": "HTTP 200"},
+  "expect": {
+    "cause_keywords": ["/slow", "느린 요청", "워커", "포화"],
+    "check_keywords": ["/slow", "docker compose logs app", "latency_ms", "워커"],
+    "forbidden_keywords": ["데이터베이스 장애", "DB 장애", "디스크", "메모리 누수", "DDoS", "공격", "앱 정지"],
+    "expect_unknown": false
+  },
+  "holdout": true
+}
