@@ -53,12 +53,15 @@ def test_planned_stage_has_only_a_summary(s):
 
 
 def test_stage_map_matches_the_playground_record_stages():
-    impl = [s["id"] for s in STAGES if s["implemented"]]
+    # 놀이터 단계(applies_to가 playground)만 본다. 장애 분석 단계가 구현되어 늘어나도 이 시험의 의도는 그대로다.
+    impl = [s["id"] for s in STAGES if s["implemented"] and s["applies_to"] == ["playground"]]
     assert impl == list(runs.PLAYGROUND_STAGES)                       # 구현된 단계 = 놀이터 기록의 6단계(같은 순서)
-    assert all(s["applies_to"] == ["playground"] for s in STAGES if s["implemented"])
+    # 구현된 장애 분석 단계는 장애 기록의 5단계(지도의 순서대로). applies_to에 incident가 든 예정 단계는 제외한다.
+    incident_impl = [s["id"] for s in STAGES if s["implemented"] and "incident" in s["applies_to"]]
+    assert incident_impl == ["evidence", "prompt", "llm_call", "parse", "notify"]
     planned_a = [s["id"] for s in STAGES if not s["implemented"] and s["week"] == "A"]
     planned_b = [s["id"] for s in STAGES if not s["implemented"] and s["week"] == "B"]
-    assert planned_a == ["log_emit", "select", "mask", "prompt", "notify", "store"]
+    assert planned_a == ["log_emit", "select", "mask", "store"]
     assert planned_b == ["chunk", "embed", "retrieve"] and all(s["lane"] == "B" for s in STAGES if s["id"] in planned_b)
 
 

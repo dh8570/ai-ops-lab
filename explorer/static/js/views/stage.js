@@ -2,6 +2,7 @@
 // 1 한 줄 요약  2 입력→출력  3 그림  4 직접 만져 보기  5 생길 수 있는 실패  6 설명(세 단계)  7 증거  8 확인하지 못한 것
 import { getRun, getStageContent, getStages, RUN_ID_RE, state, STAGE_ID_RE } from '../data.js';
 import * as decode from '../render/decode.js';
+import * as incident from '../render/incident.js';
 import * as input from '../render/input.js';
 import * as load from '../render/load.js';
 import * as prefill from '../render/prefill.js';
@@ -10,7 +11,9 @@ import * as tokenize from '../render/tokenize.js';
 import { append, badge, el, fieldTable, fmtMs, GRADES, note } from '../ui.js';
 import { stepper } from './run.js';
 
-const RENDERERS = { input, tokenize, load, prefill, decode, restore };
+// 놀이터 6단계는 단계마다 전용 렌더러, 장애 분석 기록의 5단계는 같은 범용 렌더러(output을 표로)를 쓴다.
+const RENDERERS = { input, tokenize, load, prefill, decode, restore,
+  evidence: incident, prompt: incident, llm_call: incident, parse: incident, notify: incident };
 const LEVELS = [['summary', '한 줄'], ['easy', '쉬운 말'], ['precise', '정확하게']];
 const LEVEL_KEY = 'pipeline-explain-level';
 
@@ -69,7 +72,8 @@ export async function render(root, ctx) {
   const meta = stages.find((s) => s.id === stageId);
   if (!meta) throw new Error(`알 수 없는 단계: ${stageId}`);
   const stage = run.stages.find((s) => s.id === stageId) || null;
-  const planned = !meta.implemented;
+  // '예정'은 구현되지 않았고 이 기록에도 그 단계가 없을 때만이다. 지도에는 예정이어도 기록에 있으면(장애 기록의 prompt, notify) 그 기록을 보여 준다.
+  const planned = !meta.implemented && !stage;
   const titles = Object.fromEntries(stages.map((s) => [s.id, s.title]));
   const renderer = RENDERERS[stageId];
 

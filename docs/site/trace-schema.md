@@ -28,7 +28,7 @@
 | `schema_version` | 정수 | 지금은 `1` |
 | `run_id` | 문자열 | 위 정규식에 맞는 값 |
 | `created_at` | 문자열 | UTC, 밀리초, `Z`로 끝남. 예: `2026-10-28T08:53:02.891Z` |
-| `kind` | 문자열 | `playground`(놀이터) 또는 `incident`(장애 분석, 아직 만들어지지 않음) |
+| `kind` | 문자열 | `playground`(놀이터) 또는 `incident`(장애 분석, watcher가 만듦. 아래 단락) |
 | `title` | 문자열 | 입력의 앞 40자 |
 | `exportable` | 참/거짓 | **기본 거짓.** 이 값을 참으로 바꾸는 기능은 아직 없다 |
 | `redaction` | 객체 | `{applied: 참/거짓, note: 문자열}`. 지금은 `applied: false`, 마스킹 단계가 없다는 설명이 들어간다 |
@@ -37,6 +37,8 @@
 | `status` | 문자열 | `ok` / `error` / `aborted`(브라우저가 끊음) |
 | `error` | 문자열 또는 null | 오류·중단 이유 |
 | `stages` | 목록 | 단계 목록(아래) |
+
+**장애 분석 기록(`kind: "incident"`)** 은 watcher의 LLM 분석(`watcher/llm_trace.py`)이 남기고 같은 화면이 읽는다. 단계 id는 `evidence`, `prompt`, `llm_call`, `parse`, `notify`이고, `environment`에는 `ollama_version`, `model`, `prompt_version`이 있으며, `settings`에는 옵션 7개가 모두 있고, 최상위에 선택 필드 `incident`(`{id, trigger}`)가 더 있다. **incident 기록은 `environment.tokenizer`를 요구하지 않는다**(그 환경에는 토크나이저가 없다). `tokenizer`는 `kind`가 `playground`일 때만 필수이고, incident 기록에 들어 있으면 같은 형식(`repo`, `revision`, `sha256` 문자열)으로 검사한다. 허용 범위만 넓어졌고 필드 모양은 바뀌지 않았으므로 `schema_version`은 1 그대로다.
 
 ## 단계(stages)
 

@@ -80,6 +80,16 @@
     ]
   },
   {
+    "id": "evidence",
+    "title": "근거 만들기",
+    "lane": "A",
+    "week": "A",
+    "implemented": true,
+    "applies_to": [
+      "incident"
+    ]
+  },
+  {
     "id": "mask",
     "title": "마스킹",
     "lane": "A",
@@ -94,7 +104,27 @@
     "title": "프롬프트 조립",
     "lane": "A",
     "week": "A",
-    "implemented": false,
+    "implemented": true,
+    "applies_to": [
+      "incident"
+    ]
+  },
+  {
+    "id": "llm_call",
+    "title": "AI 호출",
+    "lane": "A",
+    "week": "A",
+    "implemented": true,
+    "applies_to": [
+      "incident"
+    ]
+  },
+  {
+    "id": "parse",
+    "title": "답 검사",
+    "lane": "A",
+    "week": "A",
+    "implemented": true,
     "applies_to": [
       "incident"
     ]
@@ -104,7 +134,7 @@
     "title": "알림",
     "lane": "A",
     "week": "A",
-    "implemented": false,
+    "implemented": true,
     "applies_to": [
       "incident"
     ]

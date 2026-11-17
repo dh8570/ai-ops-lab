@@ -7,7 +7,9 @@ export async function render(root, ctx) {
   let index = [], indexError = null;
   try { index = await getIndex(); } catch (e) { indexError = e.message; }
   if (ctx.isStale()) return;
-  const latest = index.find((e) => e.kind === 'playground') || index[0] || null;
+  // 단계 지도의 링크는 그 단계가 속한 종류(applies_to)의 최근 실행으로 이어진다. 그런 실행이 없으면 가장 최근 실행으로.
+  // (놀이터 기록이 없고 장애 기록만 있어도, 반대여도 링크가 깨지지 않는다)
+  const latestFor = (s) => index.find((e) => (s.applies_to || []).includes(e.kind)) || index[0] || null;
 
   root.append(el('h1', { text: '파이프라인 탐험' }),
     el('p', { class: 'lead', text: '문장 하나가 AI에게 읽히고 답이 쓰여 글자로 돌아오기까지를, 실제로 잰 실행 기록으로 한 단계씩 봅니다.' }));
@@ -21,6 +23,7 @@ export async function render(root, ctx) {
     const ul = el('ul', { class: 'map' });
     for (const s of items) {
       const tag = el('span', { class: `tag ${s.implemented ? 'impl' : 'plan'}`, text: s.implemented ? '구현됨' : `예정 ${s.week}주` });
+      const latest = latestFor(s);
       const title = latest
         ? el('a', { class: 't', href: `#/run/${latest.run_id}/${s.id}`, text: s.title })     // 최근 실행의 단계 페이지로 이어진다
         : el('span', { class: 't', text: s.title });
@@ -38,10 +41,14 @@ export async function render(root, ctx) {
   } else {
     const tb = el('tbody');
     for (const e of index.slice(0, 20)) {
-      tb.append(el('tr', {}, el('td', {}, el('a', { href: `#/run/${e.run_id}`, text: e.created_at })), el('td', { text: e.title }),
-        el('td', { text: e.model }), el('td', {}, el('span', { class: `status ${e.status}`, text: e.status }))));
+      tb.append(el('tr', {}, el('td', {}, el('a', { href: `#/run/${e.run_id}`, text: e.created_at })), el('td', { text: e.kind === 'incident' ? '장애 분석' : '놀이터' }),
+        el('td', { text: e.title }), el('td', { text: e.model }), el('td', {}, el('span', { class: `status ${e.status}`, text: e.status }))));
     }
-    root.append(el('table', {}, el('thead', {}, el('tr', {}, ...['시각(UTC)', '제목', '모델', '상태'].map((t) => el('th', { text: t })))), tb));
+    root.append(el('table', {}, el('thead', {}, el('tr', {}, ...['시각(UTC)', '종류', '제목', '모델', '상태'].map((t) => el('th', { text: t })))), tb));
   }
-  if (state.mode !== 'live') root.append(el('p', { class: 'meta', text: '재생 전용: 이 화면은 실행할 수 없고 기록 파일만 보여 줍니다.' }));
+  if (state.mode !== 'live') {
+    root.append(el('p', { class: 'meta', text: '재생 전용: 이 화면은 실행할 수 없고 기록 파일만 보여 줍니다.' }));
+    // 자료 모음 링크는 정적 모드에서만 보인다. live(실행 서버)에는 ./reports/가 없어 링크가 깨지므로 넣지 않는다.
+    root.append(el('p', { class: 'meta', id: 'reports-link' }, el('a', { href: './reports/index.html', text: '자료 모음(보고서)' })));
+  }
 }
