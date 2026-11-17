@@ -11,6 +11,7 @@ COLOR = {"FIRING": "#E5484D", "UPDATE": "#F59E0B", "RESOLVED": "#30A46C",
          "ANALYSIS": "#3B82F6", "ANALYSIS_FAILED": "#8B8D98"}
 LLM_PENDING = "AI 분석을 생성 중입니다. 완료되면 이어서 보냅니다."
 LATE_SUFFIX = " (복구 후 도착)"
+ANALYSIS_KINDS = ("ANALYSIS", "ANALYSIS_FAILED")                          # 별도 웹훅이 있으면 그쪽으로 가는 종류
 
 
 @dataclass
@@ -85,11 +86,19 @@ FORMATTERS = {"slack": to_slack, "discord": to_discord}
 
 
 class Notifier:
-    def __init__(self, provider: str, webhook_url: str, emit, llm_enabled: bool = False):
+    def __init__(self, provider: str, webhook_url: str, emit, llm_enabled: bool = False,
+                 analysis_webhook_url: str = ""):
         if provider not in FORMATTERS:
             raise ValueError(f"지원하지 않는 알림 채널: {provider}")
         self.provider, self.url, self.emit = provider, webhook_url, emit
+        self.analysis_url = analysis_webhook_url                           # 비면 분석도 기존 주소(같은 채널)로 보낸다
         self.llm_enabled = llm_enabled                                     # FIRING 설명 줄(분석 예고) 표시 여부
+
+    def _route(self, kind: str) -> tuple[str, str]:
+        """(채널 이름, 보낼 주소). 주소는 이벤트에 쓰지 않는다."""
+        if kind in ANALYSIS_KINDS and self.analysis_url:
+            return "analysis", self.analysis_url
+        return "main", self.url
 
     def send(self, kind: str, inc, **ctx) -> bool:
         """어떤 경우에도 예외를 밖으로 내보내지 않는다. 감시 루프가 죽으면 이미 저장된 장애의 FIRING 알림이 사라진다."""
@@ -97,13 +106,17 @@ class Notifier:
             return self._send_inner(kind, inc, **ctx)
         except Exception as e:
             self.emit("notify_failed", provider=self.provider, kind=kind, incident_id=inc.id,
-                      error=f"internal:{type(e).__name__}", reason=self._scrub(str(e), 150))
+                      error=f"internal:{type(e).__name__}", reason=self._scrub(str(e), 150),
+                      channel=self._route(kind)[0])
             return False
 
     def _send_inner(self, kind: str, inc, **ctx) -> bool:
-        payload = FORMATTERS[self.provider](build_message(kind, inc, llm_enabled=self.llm_enabled, **ctx))
-        if not self.url:
-            self.emit("notify_dryrun", provider=self.provider, kind=kind, incident_id=inc.id, payload=payload)
+        pending = self.llm_enabled and not self.analysis_url               # 분석 예고 줄은 분석이 같은 채널로 올 때만
+        payload = FORMATTERS[self.provider](build_message(kind, inc, llm_enabled=pending, **ctx))
+        channel, url = self._route(kind)
+        if not url:
+            self.emit("notify_dryrun", provider=self.provider, kind=kind, incident_id=inc.id, payload=payload,
+                      channel=channel)
             return True
 
         last_error = None
@@ -113,11 +126,12 @@ class Notifier:
             t0 = time.monotonic()
             try:
                 req = urllib.request.Request(
-                    self.url, data=json.dumps(payload).encode(), method="POST",
+                    url, data=json.dumps(payload).encode(), method="POST",
                     headers={"Content-Type": "application/json", "User-Agent": "ai-ops-lab-watcher/0.2"})
                 t0 = time.monotonic()                                      # urlopen 직전부터 잰다
                 with urllib.request.urlopen(req, timeout=5) as res:
-                    self.emit("notified", provider=self.provider, kind=kind, incident_id=inc.id, status=res.status)
+                    self.emit("notified", provider=self.provider, kind=kind, incident_id=inc.id, status=res.status,
+                              channel=channel)
                     return True
             except urllib.error.HTTPError as e:
                 note = ""
@@ -138,7 +152,7 @@ class Notifier:
                 attempts.append(self._attempt(attempt, type(e).__name__, str(e), t0))
             time.sleep(2 ** attempt)
         self.emit("notify_failed", provider=self.provider, kind=kind, incident_id=inc.id, error=last_error,
-                  attempts=attempts, total_sec=round(time.monotonic() - started, 1))
+                  attempts=attempts, total_sec=round(time.monotonic() - started, 1), channel=channel)
         return False
 
     @staticmethod
@@ -163,12 +177,13 @@ class Notifier:
         return min(wait if wait is not None else 1.0, 10.0)
 
     def _scrub(self, text: str, limit: int) -> str:
-        """기록에 웹훅 주소(전체와 path)가 남지 않게 치환한 뒤 limit자까지 자른다."""
-        if self.url:
-            text = text.replace(self.url, "<webhook>")
-            path = urllib.parse.urlparse(self.url).path
-            if len(path) >= 8:                                             # 짧은 path는 엉뚱한 곳이 바뀐다
-                text = text.replace(path, "<webhook>")
+        """기록에 웹훅 주소(전체와 path, 기존·분석 주소 둘 다)가 남지 않게 치환한 뒤 limit자까지 자른다."""
+        for url in (self.url, self.analysis_url):
+            if url:
+                text = text.replace(url, "<webhook>")
+                path = urllib.parse.urlparse(url).path
+                if len(path) >= 8:                                         # 짧은 path는 엉뚱한 곳이 바뀐다
+                    text = text.replace(path, "<webhook>")
         return text[:limit]
 
     def _attempt(self, attempt: int, kind: str, reason: str, t0: float, note: str = "") -> dict:
