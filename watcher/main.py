@@ -77,7 +77,7 @@ def main() -> None:
          open_incident=open_inc.id if open_inc else None,
          notify_mode=cfg.notify_provider if cfg.webhook_url else "dryrun",
          llm_enabled=cfg.llm_enabled, llm_model=cfg.llm_model if cfg.llm_enabled else None,
-         llm_prompt_version=cfg.llm_prompt_version,
+         llm_prompt_version=cfg.llm_prompt_version, llm_analysis_on_main=cfg.llm_analysis_on_main,
          analysis_channel="separate" if cfg.analysis_webhook_url else "same")   # 주소 값은 쓰지 않는다
     dispatcher.start()                                              # 알림 스레드(+ LLM 스레드, 예열)
 

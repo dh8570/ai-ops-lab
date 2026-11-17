@@ -53,7 +53,7 @@ class Config:
     state_path: str = os.environ.get("STATE_PATH", "/data/watcher.db")
     resolve_windows: int = _i("RESOLVE_WINDOWS", 5)          # 연속 조용한 창 수 → RESOLVED (60초 × 5 = 5분)
     notify_provider: str = os.environ.get("NOTIFY_PROVIDER", "slack")
-    webhook_url: str = os.environ.get("NOTIFY_WEBHOOK_URL", "")
+    webhook_url: str = field(default=os.environ.get("NOTIFY_WEBHOOK_URL", ""), repr=False)   # 비밀값: repr 숨김
     probe_url: str = os.environ.get("PROBE_URL", "http://app:8000/healthz")
     probe_interval: int = _i("PROBE_INTERVAL_SEC", 15)
     probe_timeout: float = _f("PROBE_TIMEOUT_SEC", 2.0)
@@ -83,6 +83,8 @@ class Config:
     # AI 분석 알림(ANALYSIS·ANALYSIS_FAILED)만 보낼 별도 웹훅(그림자 모드). 비면 기존 주소로 보낸다.
     # 비밀값이므로 repr에 넣지 않고, 오류 메시지에도 환경 변수 이름만 쓴다.
     analysis_webhook_url: str = field(default=os.environ.get("ANALYSIS_WEBHOOK_URL", ""), repr=False)
+    # 분석을 운영 채널(NOTIFY_WEBHOOK_URL)로 보내도 된다는 명시적 동의. 기본 거짓이라 실수로 운영 채널에 안 간다.
+    llm_analysis_on_main: bool = _b("LLM_ANALYSIS_ON_MAIN", False)
 
     def __post_init__(self):
         try:
@@ -110,3 +112,7 @@ class Config:
               "v1 또는 v2여야 한다")
         if self.analysis_webhook_url and not self.analysis_webhook_url.startswith("https://"):
             raise ValueError("ANALYSIS_WEBHOOK_URL: https://로 시작해야 한다(값은 비밀이라 적지 않는다)")
+        if (self.llm_enabled and self.webhook_url and not self.analysis_webhook_url
+                and not self.llm_analysis_on_main):
+            raise ValueError("LLM_ENABLED=1이고 NOTIFY_WEBHOOK_URL이 있는데 ANALYSIS_WEBHOOK_URL이 비어 있다. "
+                             "분석을 운영 채널로 보내려면 LLM_ANALYSIS_ON_MAIN=1을 명시해야 한다")

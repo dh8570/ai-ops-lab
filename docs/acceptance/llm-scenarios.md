@@ -25,8 +25,12 @@ F·G·H는 주입 120초 + 복구 판정 대기(`resolve_windows` 5창 = 약 5�
    ```
 3. 시험 스크립트는 시작할 때 watcher의 `start` 이벤트를 읽어 **알림이 dryrun(웹훅 없음)이 아니면 시작하지 않는다**(종료 코드 2).
    실제 Slack으로 시험 알림이 나가지 않게 하는 장치이다. 아래 명령이 `NOTIFY_WEBHOOK_URL=`(빈 값)으로 watcher를 다시 만드는 이유이다.
+   같은 이유로 `start` 이벤트의 `analysis_channel`이 `separate`(분석 웹훅 `ANALYSIS_WEBHOOK_URL`이 설정됨)이면 시작하지 않는다(종료 코드 2).
+   그래서 아래 명령은 `ANALYSIS_WEBHOOK_URL=`도 함께 비운다. 운영 쪽 규칙도 있다: `LLM_ENABLED=1`이고 `NOTIFY_WEBHOOK_URL`이 있는데
+   `ANALYSIS_WEBHOOK_URL`이 비어 있으면 watcher는 시작을 거부하고, 분석을 운영 채널로 보내려면 `LLM_ANALYSIS_ON_MAIN=1`을 명시해야 한다.
+   시험용 명령은 `NOTIFY_WEBHOOK_URL=`이 비어 있어(dryrun) 이 규칙에 걸리지 않는다.
 4. 셸에 `LLM_*`, `WATCHER_OLLAMA_URL`, `NOTIFY_WEBHOOK_URL`이 export되어 있으면 명령 앞의 값이 아니라 그것이 쓰일 수 있다.
-   `env | grep -E 'LLM_|WATCHER_|NOTIFY_'`가 비어 있는지 먼저 본다.
+   `env | grep -E 'LLM_|WATCHER_|NOTIFY_|ANALYSIS_'`가 비어 있는지 먼저 본다.
 
 ## 2. 가짜 Ollama와 시험용 watcher 준비
 
@@ -36,7 +40,7 @@ docker compose --profile llmtest up -d fake-ollama
 docker compose --profile llmtest logs --tail 3 fake-ollama      # "fake-ollama 시작 0.0.0.0:11434 모드 analysis"
 
 # (2) watcher만 다시 빌드하고 다시 만든다: LLM 켬, 가짜 서버로 연결, 알림은 dryrun
-LLM_ENABLED=1 WATCHER_OLLAMA_URL=http://fake-ollama:11434 NOTIFY_WEBHOOK_URL= \
+LLM_ENABLED=1 WATCHER_OLLAMA_URL=http://fake-ollama:11434 NOTIFY_WEBHOOK_URL= ANALYSIS_WEBHOOK_URL= \
   docker compose up -d --build --no-deps --force-recreate watcher
 ```
 - `--no-deps`: `app`·`db`를 다시 만들지 않는다. `--force-recreate`: 설정이 같아 보여도 새 컨테이너로 만든다.
@@ -63,7 +67,7 @@ python3 scripts/acceptance/llm_alerts.py --scenario r4    # 앱 정지.   약 10
 
 F는 watcher가 **닫힌 포트**를 부르게 다시 만든 뒤 한다(컨테이너 자기 자신의 9번 포트는 닫혀 있어 연결이 거부된다).
 ```
-LLM_ENABLED=1 WATCHER_OLLAMA_URL=http://127.0.0.1:9 NOTIFY_WEBHOOK_URL= \
+LLM_ENABLED=1 WATCHER_OLLAMA_URL=http://127.0.0.1:9 NOTIFY_WEBHOOK_URL= ANALYSIS_WEBHOOK_URL= \
   docker compose up -d --no-deps --force-recreate watcher
 sleep 130
 python3 scripts/acceptance/llm_alerts.py --scenario f     # Ollama 없음. 약 9분
@@ -135,7 +139,7 @@ docker compose logs --no-log-prefix watcher | grep '"event": "start"' | tail -1
 
 1. (VM) watcher를 실제 Ollama 주소(compose 기본값)로, 알림은 dryrun으로 다시 만든다. 가짜 서버는 쓰지 않는다.
    ```
-   LLM_ENABLED=1 NOTIFY_WEBHOOK_URL= docker compose up -d --no-deps --force-recreate watcher
+   LLM_ENABLED=1 NOTIFY_WEBHOOK_URL= ANALYSIS_WEBHOOK_URL= docker compose up -d --no-deps --force-recreate watcher
    ```
 2. (controller1) Ollama를 멈춘다. 서비스 이름이 `ollama`인지는 서버에서 `systemctl status ollama`로 먼저 확인한다(아직 확인하지 못했다).
    ```

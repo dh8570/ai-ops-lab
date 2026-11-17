@@ -72,6 +72,7 @@ services:
       LLM_NUM_CTX: ${LLM_NUM_CTX:-4096}
       LLM_TRACE_PATH: ${LLM_TRACE_PATH:-/data/llm_runs.jsonl}     # 분석 실행 기록(JSON Lines). watcher-state 볼륨 안
       LLM_PROMPT_VERSION: ${LLM_PROMPT_VERSION:-v1}               # 분석 system 프롬프트 버전. v1(기본) 또는 v2, 그 밖이면 시작 거부
+      LLM_ANALYSIS_ON_MAIN: ${LLM_ANALYSIS_ON_MAIN:-0}            # 1이어야 LLM_ENABLED=1 + 운영 웹훅 + 분석 웹훅 없음 조합이 시작된다(분석이 운영 채널로 감을 명시)
       ANALYSIS_WEBHOOK_URL: ${ANALYSIS_WEBHOOK_URL:-}             # 그림자 모드: AI 분석 알림만 보낼 별도 웹훅(https://). 비면 기존 주소로
     volumes:
       - app-logs:/var/log/app:ro
