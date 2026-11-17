@@ -120,7 +120,7 @@ loadgen 10초 보고: 20 → 39 → 69 → **73(정체)** → 73, timeout 급증
 ```bash
 # 사전 점검
 cd ~/ai-ops-lab
-curl -sf --max-time 2 http://100.84.255.38:8000/healthz
+curl -sf --max-time 2 http://<tailnet-ip>:8000/healthz
 MASTER=$(docker inspect -f '{{.State.Pid}}' ai-ops-lab-app-1)
 sudo nsenter -t $MASTER -n ss -ltn 'sport = :8000'
 

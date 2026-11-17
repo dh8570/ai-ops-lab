@@ -34,7 +34,7 @@ python -m microscope.verify --run ~/microscope-runs/<run_id>
 ```python
 from microscope.engine.capture import load_manifest, read_kv_cache, read_tensor
 
-run = "/home/ubuntu/microscope-runs/r-20261029-072238-7ed8"
+run = "<홈>/microscope-runs/r-20261029-072238-7ed8"
 m = load_manifest(run)
 x = read_tensor(run, "L14.resid2", manifest=m)        # Prefill [T, H] float32 numpy
 a = read_tensor(run, "D3.L5.attn", (2,), manifest=m)  # Decode 3단계, 5층 2번 헤드의 어텐션 [1, Tk]
