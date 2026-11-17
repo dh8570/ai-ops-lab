@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "runs": [
+    {
+      "source": "incident",
+      "run_id": "r-20261117-120000-abcd",
+      "why": "예시: 장애 분석 기록 하나를 공개 화면에 보여 주는 형식 예. 실제 기록이 아니다"
+    }
+  ],
+  "docs": [
+    {
+      "path": "docs/retros/2026-w03-retro.md",
+      "title": "A주 회고"
+    }
+  ],
+  "figures": [
+    {
+      "path": "docs/figures/fig5_roadmap.png",
+      "alt": "4주 AI 우선 로드맵과 완료 기준",
+      "png_text_reviewed": true
+    }
+  ],
+  "deny_extra": [
+    "EXAMPLE-DENY-WORD"
+  ]
+}
