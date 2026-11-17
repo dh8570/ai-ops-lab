@@ -1,16 +1,16 @@
 # 프로젝트 인수인계 문서 (PROJECT_CONTEXT)
 
-최종 갱신: 2026-10-27 · 작성 배경: claude.ai 대화에서 진행하던 프로젝트를 Claude Code로 이어가기 위한 맥락 정리
+최종 갱신: 2026-11-17 · 작성 배경: claude.ai 대화에서 진행하던 프로젝트를 Claude Code로 이어가기 위한 맥락 정리
 
 ---
 
 ## 1. 목표와 진행 방식
 
-- 목적: "LLM 기반 장애 분석 어시스턴트"를 만들며 어떤 문제를 AI로 푸는지, AI가 어떻게 동작하는지, 데이터를 어디에 저장해 어떻게 쓰는지를 배운다. 4주(2026-10-27 ~ 11-23). 비용 0원 원칙.
+- 목적: "LLM 기반 장애 분석 어시스턴트"를 만들며 어떤 문제를 AI로 푸는지, AI가 어떻게 동작하는지, 데이터를 어디에 저장해 어떻게 쓰는지를 배운다. 4주(2026-10-27 ~ 11-27, 11-17에 일정 재조정). 비용 0원 원칙.
 - 원칙: AI 우선(인프라는 AI 단계를 막을 때만 최소로), 매주 "AI 질문 세 가지"와 채점표·비교표 1개 이상, 모르는 것은 질문하며 배운다(용어는 docs/glossary.md).
 - 계획과 주별 상세는 `docs/plan/ai-first-4weeks.md`가 유일한 원본이다.
 - (구버전) 24주 로드맵(워킹 스켈레톤 후 ELK·Ansible·Prometheus·Airflow·Terraform·OCI 등으로 교체)은 2026-10-27에 4주 AI 우선 계획으로 대체했다.
-- 설계 그림: `docs/figures/` (Fig 2는 v0.3 2026-10-27, Fig 5는 v0.4 2026-11-02. Fig 1·3·4는 v0.2. Fig 3·4는 A주 설계 결정 뒤에 고친다).
+- 설계 그림: `docs/figures/` (Fig 2는 v0.3 2026-10-27, Fig 5는 v0.6 2026-11-17. Fig 1·3·4는 v0.2. Fig 3·4는 A주 설계 결정 뒤에 고친다).
 
 ## 2. 환경
 
@@ -116,49 +116,19 @@ docker compose stop app; (2분 뒤) docker compose start app                    
 - 탐험 사이트 S0 병합 (PR #7)
 - 현미경 엔진 스파이크 통과: Qwen2.5-7B bf16을 VM CPU에서 실행, Prefill 9.3초(72토큰), Decode 0.66초/토큰, 메모리 14.7GiB
 - 현미경 엔진 M2-a·M2-b: Prefill·Decode가 HF eager와 비트 단위로 일치(PR #12 병합)
-- **현재: A주 연장 중** (2026-11-02에 11/5까지 연장. 이유: LLM 알림이 A주 안에 끝나지 않음). 세부는 `docs/plan/ai-first-4weeks.md`
+- AI 분석 알림(T1~T4, PR #10·#11·#13·#14), 채점표와 프롬프트 비교(docs/eval, PR #16~#18), 프롬프트 스위치와 그림자 모드(PR #19·#20)가 병합되었다. 시험 489개.
+- **현재: 2026-11-17 일정 재조정(마감 11/27). A주 완료, B주 프롬프트 스위치·그림자 모드 병합(PR #19·#20). 진행: 공개 내보내기(안전 모듈과 장애 기록 화면)**
 
 ## 5. 다음 할 일
 
-**지금 할 일: A주. 세부는 `docs/plan/ai-first-4weeks.md`.** 아래 5-1~5-3은 지난 계획의 기록이다.
+**세부는 `docs/plan/ai-first-4weeks.md`(2026-11-17 재조정, 마감 11/27).**
 
-### 5-1. 2-C: 단위 테스트와 린터 (완료)
+- 11/18~11/19: 공개 링크 1차(내보내기 조립과 시험, gh-pages 배포)
+- 11/20~11/22: RAG 최소판 비교, 저장 데이터 설명, 규칙 대 ML 최소 비교, 11/22 범위 동결
+- 11/23~11/27: 채점표·비교표 모음, 공개 링크 2차, 최종 문서, 시연, 11/26 버퍼
+- 운영에서 AI 분석을 켜는 결정은 그림자 모드 기록과 사람 채점이 안정된 뒤(지금 운영 채널에는 분석이 가지 않는다)
 
-동작을 바꾸지 않고 현재 동작을 테스트로 고정한다.
-
-1. `watcher/policy.py` 신설, main.py 루프의 조건 3개를 함수로 대체 (의미 동일)
-   - `should_open_from_probe(was_firing, now_firing, open_incident)` = `now_firing and not was_firing and open_incident is None`
-   - `should_notify_update(action, inc, grace_sec)` = `action == "escalate" and inc is not None and age_sec(inc) > grace_sec`
-   - `should_update_baseline(action, requests, min_requests)` = `action == "none" and requests >= min_requests`
-2. `watcher/requirements-dev.txt`(pytest==8.3.3, ruff==0.6.9), `watcher/pyproject.toml`(ruff line-length 120, py312, select E W F I B UP / pytest testpaths tests)
-3. `scripts/check-watcher.sh`: python:3.12-slim 일회용 컨테이너에서 `ruff check --no-cache .` && `pytest -q -p no:cacheprovider`, 인자 `fix`면 `ruff check --no-cache --fix .`. `-e PYTHONDONTWRITEBYTECODE=1`(root 소유 캐시 파일 방지)
-4. `.gitignore`에 `.pytest_cache/`, `.ruff_cache/`, `__pycache__/`
-5. `watcher/tests/` (conftest.py에서 watcher/를 sys.path에 추가, 네트워크·Docker 미사용, tmp_path와 monkeypatch 사용)
-   - test_rules: 113/300 에러 → R1만 / 요청 10건이면 아무것도 안 켜짐 / p95 3000.7 → R2 / 기준선 None → R3 보류("baseline 수집 중") / rpm 175 vs 300 → R3 / rpm 270 vs 300 → R3 아님 / 기준선 50 → R3 아님
-   - test_stats: percentile([1..10], .95) == 10, 빈 목록 0.0 / `/healthz` 제외 / 501건 ÷ 100.1초 → rpm 300.3
-   - test_logreader: 기존 줄 건너뜀 / 미완성 줄 보관 후 완성 / 잘림 시 처음부터 / 깨진 JSON은 bad로 셈 / snapshot→줄 추가→restore 시 그 줄을 읽음
-   - test_state: R1 두 번 후 빈 판정 6번 → fire, suppress, recovering×4, resolve, none / R2·R3 동시 → 장애 1건 / RECOVERING 중 재발 → refire, 같은 id / R4 장애에 R2 추가 → escalate, added [R2] / 같은 DB로 Store 재생성 시 suppress / 75초 전 장애 → UPDATE 안 함, 1140초 전 → 함 / should_open_from_probe 3케이스 / should_update_baseline 3케이스
-   - test_probe_notifier: 타임아웃·타임아웃·성공 순서의 firing 변화 / take_window_flag 기억과 초기화 / UPDATE 메시지 첫 필드와 timestamp ≠ opened_at / Slack payload의 text가 [FIRING]으로 시작, header 블록 없음
-6. ruff 지적 수정(자동 → 수동), pytest 전부 통과, `docker compose up -d --build watcher` 후 start 로그 확인
-
-### 5-2. 2주차 마무리 (코드·시험·PR 완료, 노션 정리 대기)
-
-- (완료) v0 합격 시험 중 알림 항목 자동화 스크립트: `scripts/acceptance/alerts.py`, errors 시나리오 기본 모드 약 15분 (2분 내 FIRING, 중복 0, 5분 후 RESOLVED). 실측(2026-10-22~23): errors A 44초 B 1건 C 281초 / stop A 17초 B 1건 C 301초
-- (완료) 앱 정지 시나리오 추가: `--scenario stop`으로 R4 프로브 경로 시험 (앱 120초 정지, FIRING 60초 이내, 중복 0, 복구 후 RESOLVED). D(UPDATE 0건)를 포함해 실제로 돈 첫 실측: A 22초 B 1건 C 321초 D 0건 (2026-10-23) (이 실측은 R3 후속 escalate 경로를 지나지 않았음: R3·R4가 같은 창에서 동시에 켜짐). 위상 정렬과 E 도입 후 실측: A 28초 B 1건 C 297초 D 0건 E 예 (2026-10-23)
-- (완료) 설계 그림 갱신 (v0.2, 소스는 `docs/figures/src/`, 재생성은 `python3 docs/figures/src/build.py`): Fig 3(프로브 15초 별도 실행, UPDATE), Fig 4(R3 0.7·중앙값, dedup key = service, UPDATE 유예 180초), Fig 1(UPDATE 알림)
-- 2-C 노션 기록 정리: 사용자 확인 대기 (아래 6-2 목록)
-- (완료) PR #3 병합
-- 2주차 학습 노트("Watcher와 탐지 규칙"): 작성됨, 노션 반영은 사용자 확인 대기
-
-### 5-3. 3주차 (구계획, A주 계획으로 대체)
-
-Ollama 추가(8B 이하), LLM 호출 전 마스킹·최근 50줄 제한, 런북 2~3개(1주차 에러 시그니처 표, 포화 시 다른 에러가 가려지는 현상 포함), 타임아웃 30초·실패 시 기본 템플릿.
-
-- 선행 과제: Ollama를 띄워 8B 이하 모델의 실제 응답 시간을 측정한다(코드 작성 전). VM은 GPU 없이 CPU 8코어일 가능성이 높다.
-- 결정 대기: FIRING 알림은 LLM을 기다리지 않고 즉시 보내고 분석은 후속 메시지로 보낼지 (사용자 결정 전)
-- 보안: LLM 입력 마스킹은 Opus로 설계·구현한다
-
-### 5-4. 알려진 과제
+### 5-1. 알려진 과제
 
 - Docker 컨테이너 로그(json-file)와 app.jsonl이 회전 없이 증가 → 2-1에서 처리
 - 아이폰 Termius는 OpenSSH 키 등록 필요
@@ -167,7 +137,6 @@ Ollama 추가(8B 이하), LLM 호출 전 마스킹·최근 50줄 제한, 런북 
 - 남은 빚은 docs/retros/2026-w02-retro.md의 '아직 남은 것' 절 참고
 - Slack 알림 간헐 실패: 원인 미확인. 재발하면 `notify_failed`의 attempts 기록으로 조사
 - app 컨테이너와 이미지 이름표 불일치: 내용은 같을 것으로 추정. 다음 재생성 때 합격 시험으로 확인
-- 서버 root 비밀번호 SSH 허용: 정리 과제
 - 설계 그림 Fig 2에는 explorer(탐험 사이트)·microscope(현미경 엔진) 서비스가 없다. D주 그림 정리에서 추가한다.
 
 ## 6. 기록 형식 (노션)

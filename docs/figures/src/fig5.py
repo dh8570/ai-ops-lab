@@ -1,22 +1,22 @@
 from lib import *
 s = frame("4주 AI 우선 로드맵과 완료 기준", "AI를 어떤 문제에 적용하고, 어떻게 동작하고, 데이터를 어떻게 쓰는지 배우는 4주. 매주 AI 질문 세 가지와 채점표·비교표로 끝낸다", 5,
-          legend=[("box", None, "이번 주 (A)"), ("solid", C["line"], "완료 · 계획")],
-          ver="v0.4 · 2026-11-02")                       # Fig 2는 v0.3, Fig 5는 v0.4 (lib.VERSION은 v0.2로 둔다)
-x0, dw = 520, 33.8                                        # 가로축: 10/16부터 하루 dw px, 10/16~11/23 = 39일
+          legend=[("solid", C["orange"], "오늘 (11/17)"), ("solid", C["line"], "완료 · 계획")],
+          ver="v0.6 · 2026-11-17")                       # Fig 2는 v0.3, Fig 5는 v0.6 (lib.VERSION은 v0.2로 둔다)
+x0, dw = 520, 30                                          # 가로축: 10/16부터 하루 dw px, 10/16~11/27 = 43일
 def dx(d): return x0 + d * dw                             # d = 10/16 기준 경과일 (그 날의 시작 위치)
-TODAY = 11                                                # 10/27 = 10/16 + 11일
+TODAY = 32                                                # 오늘 11/17 = 10/16 + 32일
 s.rect(60, 215, 1800, 560, fill=C["panel"], stroke=C["border"], rx=12)
-# 눈금: 시작(10/16), 직전 주(10/20), 각 주 경계(10/27·11/6·11/12·11/18), 끝(11/23)
-for d, lab in [(0, "10/16"), (4, "10/20"), (11, "10/27"), (21, "11/6"), (27, "11/12"), (33, "11/18"), (39, "11/23")]:
+# 눈금: 시작(10/16), 직전 주(10/20), 각 주 경계(10/27·11/6·11/18·11/23), 끝(11/27)
+for d, lab in [(0, "10/16"), (4, "10/20"), (11, "10/27"), (21, "11/6"), (33, "11/18"), (38, "11/23"), (43, "11/27")]:
     s.add(f'<line x1="{dx(d)}" y1="262" x2="{dx(d)}" y2="752" stroke="{C["grid"]}" stroke-width="1"/>')
-    if d != TODAY: s.text(dx(d) + (4 if d == 39 else 0), 252, lab, 14, 400, C["muted"], "end" if d == 39 else "middle", mono=True)
+    if d != TODAY: s.text(dx(d) + (4 if d == 43 else 0), 252, lab, 14, 400, C["muted"], "end" if d == 43 else "middle", mono=True)
 s.text(90, 252, "단계", 15, 600, C["muted"])
 # (표지, 주제, 결과물 줄들, 시작일, 끝일, 상태, 막대 안 글자). 날짜는 10/16 기준 경과일 [시작, 끝)
 rows = [("완료", "기반", ["앱·로그·Watcher·알림·합격 시험", "+ GPU 서버 이전"], 0, 11, "done", "완료 · 10/16 ~ 10/26"),
         ("A", "LLM이 장애를 분석하게 하기", ["→ 장애 알림에 분석 붙임 · 합격 시험 추가", "+ 탐험 사이트 척추(M0) · 현미경 엔진(M2)"], 11, 21, "key", "10/27 ~ 11/5 (연장)"),
-        ("B", "데이터 · RAG · 채점표", ["→ 채점표 5개 · RAG 비교표", "+ 저장 데이터 설명"], 21, 27, "plan", "11/6 ~ 11/11"),
-        ("C", "규칙 대 ML 비교 (최소) · 현미경 화면", ["→ 규칙 대 ML 비교표 1개", "+ 현미경 화면 M3(임베딩·Prefill·첫 토큰)"], 27, 33, "plan", "11/12 ~ 11/17"),
-        ("D", "마무리 · 공개 (정적 내보내기)", ["→ 공개 링크 · 최종 문서 · 시연", "현미경 M4·M5와 에이전트는 선택"], 33, 39, "plan", "11/18 ~ 11/23")]
+        ("B", "프롬프트 개선 · 그림자 모드", ["→ 프롬프트 스위치 · 그림자 모드", "+ 공개 내보내기 설계"], 21, 33, "plan", "11/6 ~ 11/17"),
+        ("C", "공개 링크 · RAG · 규칙 대 ML (최소)", ["→ 공개 링크 1차 · RAG 비교표", "+ 저장 데이터 설명 · 규칙 대 ML 표"], 33, 38, "plan", "11/18 ~ 11/22"),
+        ("D", "마무리 · 공개", ["→ 공개 링크 완성 · 최종 문서 · 시연", "현미경 화면 · 에이전트는 후속"], 38, 43, "plan", "11/23 ~ 11/27")]
 y = 290
 for tag, name, desc, a, b, st, inside in rows:
     s.text(90, y + 24, tag, 16, 700, {"done": C["green"], "key": C["blue"]}.get(st, C["muted"]), mono=(st != "done"))   # 한글은 mono 금지
@@ -28,9 +28,9 @@ for tag, name, desc, a, b, st, inside in rows:
     s.rect(bx, y + 6, bw, 36, fill=fill, stroke=stroke, rx=6, sw=sw, dash=dash)
     s.text(bx + bw / 2, y + 30, inside, 14, 600, C["ink"] if st == "key" else C["muted"], "middle", mono=(st in ("key", "plan") and inside.isascii()))
     y += 90
-# A주 시작(10/27) 세로선
-s.add(f'<line x1="{dx(TODAY)}" y1="262" x2="{dx(TODAY)}" y2="752" stroke="{C["orange"]}" stroke-width="2.5"/>')
-s.text(dx(TODAY), 252, "A주 시작 10/27", 14, 700, C["orange"], "middle", mono=False)
+# 오늘(11/17) 세로선
+s.add(f'<line x1="{dx(TODAY)}" y1="240" x2="{dx(TODAY)}" y2="752" stroke="{C["orange"]}" stroke-width="2.5"/>')
+s.text(dx(TODAY), 232, "오늘 11/17", 14, 700, C["orange"], "middle", mono=False)
 # 완료 기준 + 범위 밖
 s.rect(60, 795, 1060, 215, fill=C["panel"], stroke=C["border"], rx=12)
 s.text(90, 834, "완료 기준 · 회귀 게이트", 19, 700, C["ink"])
