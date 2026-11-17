@@ -93,9 +93,12 @@ def validate_bundle(b) -> list[str]:
             p.append("environment.model이 문자열이 아님")
         if e.get("ollama_version") is not None and not isinstance(e.get("ollama_version"), str):
             p.append("environment.ollama_version은 문자열 또는 null")
-        t = e.get("tokenizer")
-        if not isinstance(t, dict) or not all(isinstance(t.get(k), str) for k in ("repo", "revision", "sha256")):
-            p.append("environment.tokenizer는 {repo, revision, sha256} 문자열이어야 함")
+        # tokenizer는 놀이터 기록에는 필수, 장애(incident) 기록에서는 선택(그 환경에는 토크나이저가 없다).
+        # 있으면 어느 종류든 같은 형식으로 검사한다.
+        if b.get("kind") == "playground" or "tokenizer" in e:
+            t = e.get("tokenizer")
+            if not isinstance(t, dict) or not all(isinstance(t.get(k), str) for k in ("repo", "revision", "sha256")):
+                p.append("environment.tokenizer는 {repo, revision, sha256} 문자열이어야 함")
     if need("settings", dict):
         s = b["settings"]
         for k in ("temperature", "num_predict", "num_ctx"):

@@ -152,6 +152,10 @@ activemq-data/
 # Environments
 .env
 .envrc
+# .env.bak-날짜 같은 백업·변형 파일은 위의 `.env` 규칙(이름이 정확히 .env인 파일만)에 걸리지 않아
+# DB 비밀번호·웹훅 URL이 담긴 채 커밋될 수 있다. .env.* 로 모두 막고 예시 파일만 허용한다.
+.env.*
+!.env.example
 .venv
 env/
 venv/

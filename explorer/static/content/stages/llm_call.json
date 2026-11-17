@@ -1,0 +1,16 @@
+{
+  "summary": "프롬프트를 Ollama의 /api/chat에 한 번 보내고, 답 전문과 시간·개수 통계를 받아 오는 단계입니다.",
+  "easy": "식당에 주문을 넣고 음식이 나올 때까지 기다리는 것과 같습니다. 주문서에는 모델 이름, 모델을 얼마나 메모리에 둘지(keep_alive), 샘플링 옵션 7개를 항상 모두 적습니다. 가게에 연결하는 데 5초, 주문부터 음식이 다 나올 때까지 합쳐 30초가 넘으면 기다리지 않고 실패로 처리하고, 실패하면 그 이유를 짧은 코드로 남깁니다.",
+  "precise": "llm_client.chat이 stream을 끄고(응답 전체를 한 번에 받음) JSON 스키마를 format으로 붙여 /api/chat을 한 번 호출합니다. 옵션 7개(temperature, seed, top_k, top_p, repeat_penalty, num_predict, num_ctx)는 요청과 기록에 항상 모두 명시합니다. 연결 상한은 5초, 연결부터 응답 끝까지의 총 상한은 30초입니다(기본 설정값). 기록에는 응답 전문(text), done_reason, Ollama가 준 통계(load_ms, prompt_eval_count, prompt_eval_cached_count, prompt_eval_ms, eval_count, eval_ms, total_ms)와 우리가 잰 전체 시간(wall_ms)이 들어갑니다. tok_s(= eval_count ÷ eval_ms)와 outside_ollama_ms(= wall_ms − total_ms)는 계산값이고, 모델·keep_alive·options는 입력입니다. 값이 없으면 해당 필드는 미확인으로 적습니다. done_reason이 length이면 답이 잘렸다고 보고 실패(truncated)로 처리하되 글과 통계는 그대로 남깁니다. 실패 이유 코드는 timeout, connect_error, model_missing, http_<상태>, bad_json, bad_response, truncated, internal_error:<예외 이름>입니다.",
+  "failures": [
+    "연결이 5초 안에 안 되거나 총 30초를 넘기면 이 단계는 실패(timeout, connect_error)로 끝나고, 뒤의 parse는 건너뜁니다(skipped).",
+    "모델이 내려가 있으면 첫 호출에서 올리기 시간이 길어져 30초 상한에 걸릴 수 있습니다.",
+    "응답이 num_predict 한도에서 잘리면(done_reason이 length) 실패(truncated)로 처리합니다.",
+    "Ollama가 200이 아닌 상태를 돌려주거나(http_<상태>, 모델이 없으면 model_missing) 응답을 읽을 수 없으면(bad_json, bad_response) 실패로 기록합니다."
+  ],
+  "unverified": [
+    "같은 입력과 같은 seed에서 매번 같은 답이 나오는지는 이 기록 하나로 확인하지 못했습니다.",
+    "outside_ollama_ms(wall_ms − total_ms)가 어디에 쓰인 시간인지(연결, 전송, 파이썬 처리 등)는 나누어 재지 않았습니다.",
+    "prompt_eval_cached_count는 Ollama가 준 값을 그대로 보여 주며, 정확한 의미는 확인하지 않았습니다(읽기 단계 설명 참고)."
+  ]
+}

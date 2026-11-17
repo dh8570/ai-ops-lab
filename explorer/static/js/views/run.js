@@ -24,7 +24,11 @@ export function summary(run) {
   const rows = [
     ['run_id', run.run_id], ['시각(UTC)', run.created_at], ['종류', run.kind], ['제목', run.title],
     ['모델', env.model], ...(env.ollama_version ? [['Ollama', env.ollama_version]] : []),
-    ['설정', `temperature ${s.temperature} · seed ${'seed' in s ? s.seed : '임의'} · num_predict ${s.num_predict} · num_ctx ${s.num_ctx}`],
+    // 장애 분석 기록에만 있는 항목: 프롬프트 버전, 어느 장애의 분석인지(incident), 옵션 7개 중 나머지 셋
+    ...(env.prompt_version ? [['프롬프트 버전', env.prompt_version]] : []),
+    ...(run.incident ? [['장애', [run.incident.id != null ? `#${run.incident.id}` : '', `트리거 ${run.incident.trigger}`].filter(Boolean).join(' · ')]] : []),
+    ['설정', `temperature ${s.temperature} · seed ${'seed' in s ? s.seed : '임의'} · num_predict ${s.num_predict} · num_ctx ${s.num_ctx}`
+      + ['top_k', 'top_p', 'repeat_penalty'].filter((k) => k in s).map((k) => ` · ${k} ${s[k]}`).join('')],
     ['상태', el('span', { class: `status ${run.status}`, text: run.status })], ['오류', run.error || '없음'],
     ['공개 가능(exportable)', String(run.exportable)], ['마스킹', `${run.redaction.applied ? '적용' : '적용 안 함'} — ${run.redaction.note}`],
   ];
