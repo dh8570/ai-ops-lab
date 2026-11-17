@@ -47,6 +47,19 @@ SYSTEM_PROMPT_V1 = """너는 웹 서비스 장애 분석 보조다. 반드시 �
 근거가 부족하면 해당 칸에 "알 수 없음"이라고 쓴다.
 출력은 JSON 하나만 쓴다: {"summary": 한 문장(150자 이내), "causes": [원인 후보 2~3개, 각각 한 문장], "checks": [확인할 항목 2~3개, 각각 한 문장]}"""  # noqa: E501  (지시문 원문 그대로. 한 글자도 바꾸지 않는다)
 
+# v2: scripts/eval/variants.py의 SYSTEM_PROMPT_V2를 그대로 옮긴 것(T7). LLM_PROMPT_VERSION=v2일 때만 쓴다
+SYSTEM_PROMPT_V2 = """너는 웹 서비스 장애 분석 보조다. 반드시 한국어로만 답한다(영어는 서비스·도구 이름에만 쓰고, 중국어·일본어 문자는 쓰지 않는다).
+[장애 요약]에 있는 사실이 가장 중요한 근거다. [런북]은 참고 자료이며 장애 요약과 맞는 항목만 쓴다. 없는 로그, 숫자, 이름을 지어내지 않는다.
+규칙:
+1. 원인 후보는 시스템의 어느 부분(경로, 컨테이너, DB, 워커 등)이 문제인지로 쓴다. 규칙 이름(R1~R4)이나 지표 이름을 원인으로 쓰지 않는다.
+2. 장애 요약에서 이미 정상으로 확인된 것은 원인으로 쓰지 않는다. 예: 5xx가 없는 경로, 프로브가 정상(HTTP 200)이면 앱 정지나 워커 포화는 원인이 아니다.
+3. 근거가 부족하면 지어내지 말고 두 번째 원인 칸에 "알 수 없음: 이유"를 쓴다.
+4. 확인 항목은 원인 후보마다 하나씩, 바로 실행할 수 있게 쓴다.
+출력은 JSON 하나만 쓴다: {"summary": 한 문장(150자 이내), "causes": [원인 후보 2~3개, 각각 한 문장], "checks": [확인할 항목 2~3개, 각각 한 문장]}"""  # noqa: E501  (지시문 원문 그대로. 한 글자도 바꾸지 않는다)
+
+PROMPT_VERSIONS = ("v1", "v2")
+_SYSTEM_PROMPTS = {"v1": SYSTEM_PROMPT_V1, "v2": SYSTEM_PROMPT_V2}
+
 DRAFT_MARK = "초안:"
 
 
@@ -106,8 +119,10 @@ def estimate_tokens(text: str) -> int:
     return len(text)
 
 
-def _system_text(runbooks_text: str) -> str:
-    return SYSTEM_PROMPT_V1 + ("\n\n" + runbooks_text if runbooks_text else "")   # 런북 블록마다 "[런북] 제목"이 있다
+def _system_text(runbooks_text: str, version: str = "v1") -> str:
+    if version not in _SYSTEM_PROMPTS:
+        raise ValueError(f"프롬프트 버전은 {', '.join(PROMPT_VERSIONS)} 중 하나여야 한다: {version!r}")
+    return _SYSTEM_PROMPTS[version] + ("\n\n" + runbooks_text if runbooks_text else "")   # 런북 블록마다 "[런북] 제목"
 
 
 def _status_bucket(status) -> str | None:
@@ -246,8 +261,8 @@ def _shrunk(evidence: dict) -> dict:
     return ev
 
 
-def _prompt_tokens(evidence: dict, runbooks_text: str) -> int:
-    return estimate_tokens(_system_text(runbooks_text)) + estimate_tokens(render_evidence(evidence))
+def _prompt_tokens(evidence: dict, runbooks_text: str, version: str = "v1") -> int:
+    return estimate_tokens(_system_text(runbooks_text, version)) + estimate_tokens(render_evidence(evidence))
 
 
 # ---------------------------------------------------------------- 프롬프트 조립
@@ -307,13 +322,17 @@ def load_runbooks(directory) -> str:
     return "\n\n".join(blocks)
 
 
-def build_messages(evidence: dict, runbooks_text: str) -> list[dict]:
+def build_messages(evidence: dict, runbooks_text: str, version: str = "v1") -> list[dict]:
     """system(바뀌지 않는 지시 + 런북)과 user(이번 장애)를 나눠 담는다. mask()는 user 글에만 적용한다.
-    system은 고정 지시와 레포의 런북이라 마스킹하지 않는다(같은 입력이면 같은 system이어야 프리픽스 캐시가 유지된다)."""
-    if _prompt_tokens(evidence, runbooks_text) > PROMPT_TOKEN_BUDGET:
+    system은 고정 지시와 레포의 런북이라 마스킹하지 않는다(같은 입력이면 같은 system이어야 프리픽스 캐시가 유지된다).
+    version은 system 지시만 고른다(v1 기본, v2). user·mask·근거 축소 규칙은 같고,
+    축소 판정은 그 버전의 system 길이로 한다(scripts/eval의 build_messages_variant와 같은 계산).
+    모르는 버전이면 ValueError."""
+    system = _system_text(runbooks_text, version)
+    if _prompt_tokens(evidence, runbooks_text, version) > PROMPT_TOKEN_BUDGET:
         evidence = _shrunk(evidence)
     return [
-        {"role": "system", "content": _system_text(runbooks_text)},
+        {"role": "system", "content": system},
         {"role": "user", "content": mask(render_evidence(evidence))},
     ]
 

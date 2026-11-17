@@ -272,13 +272,13 @@ class Dispatcher:
         self.emit("llm_start", incident_id=req.incident_id, trigger=req.trigger)
 
         t0 = time.monotonic()
-        messages = analysis.build_messages(ev, self.runbooks_text)
+        messages = analysis.build_messages(ev, self.runbooks_text, cfg.llm_prompt_version)
         system, user = messages[0]["content"], messages[1]["content"]
         est_tokens = analysis.estimate_tokens(system) + analysis.estimate_tokens(user)
         stages.append(llm_trace.make_stage(
             "prompt", "ok", _ms_since(t0),
             {"*": "computed", "version": "input", "user": "input"},
-            {"version": analysis.PROMPT_VERSION, "system_sha256": _sha256(system), "system_chars": len(system),
+            {"version": cfg.llm_prompt_version, "system_sha256": _sha256(system), "system_chars": len(system),
              "user": user, "est_tokens": est_tokens}))
 
         result = self._chat(cfg.ollama_url, cfg.llm_model, messages, self.options, fmt=analysis.ANALYSIS_SCHEMA,
@@ -345,7 +345,7 @@ class Dispatcher:
                                                 notify_out, notes)]
         rec = llm_trace.build_run_record(
             req.incident_id, req.trigger, f"incident #{req.incident_id:04d} {req.trigger}", self.cfg.llm_model,
-            analysis.PROMPT_VERSION, self.options, stages, "ok" if error is None else "error", error,
+            self.cfg.llm_prompt_version, self.options, stages, "ok" if error is None else "error", error,
             self.ollama_version)
         llm_trace.append_run(self.cfg.llm_trace_path, rec)
 

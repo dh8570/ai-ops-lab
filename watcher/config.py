@@ -79,6 +79,10 @@ class Config:
     llm_num_predict: int = _i("LLM_NUM_PREDICT", 512)
     llm_num_ctx: int = _i("LLM_NUM_CTX", 4096)
     llm_trace_path: str = os.environ.get("LLM_TRACE_PATH", "/data/llm_runs.jsonl")   # 분석 실행 기록(JSON Lines)
+    llm_prompt_version: str = os.environ.get("LLM_PROMPT_VERSION", "v1")   # 분석 system 프롬프트 버전(v1 기본, v2)
+    # AI 분석 알림(ANALYSIS·ANALYSIS_FAILED)만 보낼 별도 웹훅(그림자 모드). 비면 기존 주소로 보낸다.
+    # 비밀값이므로 repr에 넣지 않고, 오류 메시지에도 환경 변수 이름만 쓴다.
+    analysis_webhook_url: str = field(default=os.environ.get("ANALYSIS_WEBHOOK_URL", ""), repr=False)
 
     def __post_init__(self):
         try:
@@ -102,3 +106,7 @@ class Config:
               "0.5~2.0 범위여야 한다")
         _need("LLM_NUM_PREDICT", self.llm_num_predict, 1 <= self.llm_num_predict <= 2048, "1~2048 범위여야 한다")
         _need("LLM_NUM_CTX", self.llm_num_ctx, 512 <= self.llm_num_ctx <= 8192, "512~8192 범위여야 한다")
+        _need("LLM_PROMPT_VERSION", self.llm_prompt_version, self.llm_prompt_version in ("v1", "v2"),
+              "v1 또는 v2여야 한다")
+        if self.analysis_webhook_url and not self.analysis_webhook_url.startswith("https://"):
+            raise ValueError("ANALYSIS_WEBHOOK_URL: https://로 시작해야 한다(값은 비밀이라 적지 않는다)")

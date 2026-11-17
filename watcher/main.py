@@ -56,7 +56,8 @@ def main() -> None:
     cfg = Config()
     store = Store(cfg.state_path)
     manager = IncidentManager(store, cfg.service, cfg.resolve_windows)
-    notifier = Notifier(cfg.notify_provider, cfg.webhook_url, emit, llm_enabled=cfg.llm_enabled)
+    notifier = Notifier(cfg.notify_provider, cfg.webhook_url, emit, llm_enabled=cfg.llm_enabled,
+                        analysis_webhook_url=cfg.analysis_webhook_url)
     runbooks_text = analysis.load_runbooks(RUNBOOK_DIR)            # 시작할 때 한 번 읽는다
     dispatcher = Dispatcher(cfg, notifier, emit, runbooks_text)    # LLM_HOLD_SEC>0이면 여기서 멈춘다
     prober = Prober(cfg.probe_url, cfg.probe_timeout, cfg.probe_fail_threshold)
@@ -75,7 +76,9 @@ def main() -> None:
          resolve_windows=cfg.resolve_windows, restored_offset=reader.offset, restored_history=len(history),
          open_incident=open_inc.id if open_inc else None,
          notify_mode=cfg.notify_provider if cfg.webhook_url else "dryrun",
-         llm_enabled=cfg.llm_enabled, llm_model=cfg.llm_model if cfg.llm_enabled else None)
+         llm_enabled=cfg.llm_enabled, llm_model=cfg.llm_model if cfg.llm_enabled else None,
+         llm_prompt_version=cfg.llm_prompt_version,
+         analysis_channel="separate" if cfg.analysis_webhook_url else "same")   # 주소 값은 쓰지 않는다
     dispatcher.start()                                              # 알림 스레드(+ LLM 스레드, 예열)
 
     tick = 0
