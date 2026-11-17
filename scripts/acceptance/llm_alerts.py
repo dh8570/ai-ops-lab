@@ -274,6 +274,9 @@ def llm_preconditions(scenario: str, window_sec: int) -> list[str]:
         if s.get("notify_mode") != "dryrun":
             problems.append(f"watcher의 notify_mode가 {s.get('notify_mode')!r} (dryrun이어야 함). 실제 Slack으로 "
                             "나갈 수 있어 시험하지 않습니다. NOTIFY_WEBHOOK_URL을 비운 채 watcher를 다시 만드세요")
+        if s.get("analysis_channel") == "separate":              # 필드가 없으면(이전 빌드) 문제로 보지 않는다
+            problems.append("분석 알림이 별도 웹훅(실제 채널)으로 나갈 수 있어 시험하지 않습니다. "
+                            "ANALYSIS_WEBHOOK_URL=을 비운 채 watcher를 다시 만드세요")
         if s.get("llm_enabled") is not True:
             problems.append("watcher의 llm_enabled가 켜져 있지 않음 (LLM_ENABLED=1로 watcher를 다시 만드세요)")
     if scenario != "f" and not fake_running():
