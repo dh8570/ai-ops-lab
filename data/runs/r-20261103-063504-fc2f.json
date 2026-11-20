@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "run_id": "r-20261103-063504-fc2f",
+  "created_at": "2026-11-03T06:35:04.226Z",
+  "kind": "incident",
+  "title": "incident #0013 window",
+  "exportable": true,
+  "redaction": {
+    "applied": false,
+    "note": "공개 검사 통과(허용 목록, 패턴 검사). 마스킹은 하지 않았고 원문 로그를 AI에 보내지 않는 방식이다"
+  },
+  "environment": {
+    "ollama_version": "0.40.2",
+    "model": "qwen2.5:7b",
+    "prompt_version": "v1"
+  },
+  "settings": {
+    "temperature": 0.0,
+    "seed": 42,
+    "top_k": 40,
+    "top_p": 0.9,
+    "repeat_penalty": 1.0,
+    "num_predict": 512,
+    "num_ctx": 4096
+  },
+  "status": "error",
+  "error": "connect_error",
+  "stages": [
+    {
+      "id": "evidence",
+      "status": "ok",
+      "duration_ms": null,
+      "evidence": {
+        "*": "computed",
+        "top_error_kinds": "measured",
+        "top_paths": "measured",
+        "probe": "measured"
+      },
+      "output": {
+        "incident": {
+          "id": 13,
+          "severity": "critical",
+          "opened_min_ago": 0,
+          "fired_rules": [
+            {
+              "rule": "R1",
+              "detail": "error_rate 0.29, 5xx 123/423"
+            }
+          ]
+        },
+        "window": {
+          "sec": 60,
+          "requests": 423,
+          "errors_5xx": 123,
+          "error_rate": 0.291,
+          "p95_ms": 27.4,
+          "rpm": 423.0
+        },
+        "baseline": {
+          "rpm": 300.0
+        },
+        "top_error_kinds": [
+          {
+            "kind": "RuntimeError",
+            "count": 123
+          }
+        ],
+        "top_paths": [
+          {
+            "path": "/",
+            "count": 300,
+            "status_counts": {
+              "2xx": 300,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "path": "/error",
+            "count": 123,
+            "status_counts": {
+              "2xx": 0,
+              "4xx": 0,
+              "5xx": 123
+            }
+          }
+        ],
+        "probe": {
+          "consecutive_failures": 0,
+          "last_reason_code": "HTTP 200"
+        },
+        "records_available": true
+      },
+      "notes": []
+    },
+    {
+      "id": "prompt",
+      "status": "ok",
+      "duration_ms": 0.057,
+      "evidence": {
+        "*": "computed",
+        "version": "input",
+        "user": "input"
+      },
+      "output": {
+        "version": "v1",
+        "system_sha256": "2c5d43ac6f7ffb90662d33ba0f707d6ac5cfcc4b75ba5396cf8ba947f7db195e",
+        "system_chars": 1412,
+        "user": "[장애 요약]\n장애 #13 · 심각도 critical · 시작 방금 · 켜진 규칙: R1(error_rate 0.29, 5xx 123/423)\n[최근 60초] 요청 423 · 5xx 123 · 에러율 0.29 · p95 27ms · 분당 요청 423\n[기준선] 평소 분당 요청 300\n[오류 유형] RuntimeError 123건\n[경로] / 300건(2xx 300) · /error 123건(5xx 123)\n[프로브] 연속 실패 0회 · 최근 결과 HTTP 200",
+        "est_tokens": 1672
+      },
+      "notes": []
+    },
+    {
+      "id": "llm_call",
+      "status": "error",
+      "duration_ms": 0.528,
+      "evidence": {
+        "*": "measured",
+        "model": "input",
+        "keep_alive": "input",
+        "options": "input",
+        "tok_s": "unverified",
+        "outside_ollama_ms": "unverified",
+        "load_ms": "unverified",
+        "prompt_eval_count": "unverified",
+        "prompt_eval_cached_count": "unverified",
+        "prompt_eval_ms": "unverified",
+        "eval_count": "unverified",
+        "eval_ms": "unverified",
+        "total_ms": "unverified"
+      },
+      "output": {
+        "ok": false,
+        "reason": "connect_error",
+        "http_status": null,
+        "done_reason": null,
+        "text": "",
+        "load_ms": null,
+        "prompt_eval_count": null,
+        "prompt_eval_cached_count": null,
+        "prompt_eval_ms": null,
+        "eval_count": null,
+        "eval_ms": null,
+        "total_ms": null,
+        "wall_ms": 0.528,
+        "model": "qwen2.5:7b",
+        "keep_alive": "24h",
+        "options": {
+          "temperature": 0.0,
+          "seed": 42,
+          "top_k": 40,
+          "top_p": 0.9,
+          "repeat_penalty": 1.0,
+          "num_predict": 512,
+          "num_ctx": 4096
+        },
+        "tok_s": null,
+        "outside_ollama_ms": null
+      },
+      "notes": [
+        "실패: connect_error"
+      ]
+    },
+    {
+      "id": "parse",
+      "status": "skipped",
+      "duration_ms": null,
+      "evidence": {
+        "*": "computed"
+      },
+      "output": {
+        "ok": false,
+        "flags": []
+      },
+      "notes": [
+        "호출 실패: connect_error"
+      ]
+    },
+    {
+      "id": "notify",
+      "status": "ok",
+      "duration_ms": 285.887,
+      "evidence": {
+        "*": "measured"
+      },
+      "output": {
+        "sent": true,
+        "kind": "ANALYSIS_FAILED",
+        "mode": "webhook"
+      },
+      "notes": []
+    }
+  ],
+  "incident": {
+    "id": 13,
+    "trigger": "window"
+  }
+}

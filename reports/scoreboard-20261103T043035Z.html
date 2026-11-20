@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>채점표 첫 실행(v1 기준선)</title>
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body>
+<main>
+<h1>장애 분석 채점표 (A1-T5a)</h1>
+<h2>조건</h2>
+<table>
+<thead><tr><th>항목</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>실행 시각(UTC)</td><td>20261103T043035Z</td></tr>
+<tr><td>모델</td><td>qwen2.5:7b</td></tr>
+<tr><td>Ollama 버전</td><td>0.40.2</td></tr>
+<tr><td>PROMPT_VERSION</td><td>v1</td></tr>
+<tr><td>SYSTEM_PROMPT_V1 sha256</td><td>62aa479148e8ec8bd5ae74fc3534e9a5e31b0b1b5539e02468f0afb12b63f9e8</td></tr>
+<tr><td>옵션 7개 (prod x3)</td><td>{&quot;temperature&quot;: 0.0, &quot;seed&quot;: 42, &quot;top_k&quot;: 40, &quot;top_p&quot;: 0.9, &quot;repeat_penalty&quot;: 1.0, &quot;num_predict&quot;: 512, &quot;num_ctx&quot;: 4096}</td></tr>
+<tr><td>옵션 7개 (var x5, seed 1~5)</td><td>{&quot;temperature&quot;: 0.2, &quot;seed&quot;: &quot;1~5&quot;, &quot;top_k&quot;: 40, &quot;top_p&quot;: 0.9, &quot;repeat_penalty&quot;: 1.0, &quot;num_predict&quot;: 512, &quot;num_ctx&quot;: 4096}</td></tr>
+<tr><td>keep_alive / 연결·총 제한(초)</td><td>24h / 5·30</td></tr>
+<tr><td>런북</td><td>1129자 (조건 runbook에서만 사용)</td></tr>
+<tr><td>호출 수</td><td>80 (시나리오 5 x 조건 2 x 8)</td></tr>
+<tr><td>주의</td><td>시나리오 숫자는 합성이며 실측이 아니다.</td></tr>
+</tbody>
+</table>
+<h2>① 시나리오 x 조건 통과율</h2>
+<table>
+<thead><tr><th>시나리오</th><th>no_runbook prod(3회)</th><th>no_runbook var(5회)</th><th>runbook prod(3회)</th><th>runbook var(5회)</th></tr></thead>
+<tbody>
+<tr><td>s1_error_spike</td><td>0/3</td><td>1/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s2_db_down</td><td>0/3</td><td>2/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s3_latency</td><td>1/3</td><td>4/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s4_app_down</td><td>0/3</td><td>0/5</td><td>3/3</td><td>4/5</td></tr>
+<tr><td>s5_weak_signal</td><td>3/3</td><td>3/5</td><td>1/3</td><td>5/5</td></tr>
+<tr><td>합계</td><td>4/15</td><td>10/25</td><td>13/15</td><td>24/25</td></tr>
+</tbody>
+</table>
+<h2>② 항목별 통과 수 (전체 시나리오 합)</h2>
+<p>원인·통과는 s5(expect_unknown)에서 통과 판정에 unknown_ok를 쓴다. 원인 열은 s5도 cause_ok 그대로 센다.</p>
+<table>
+<thead><tr><th>항목</th><th>no_runbook prod</th><th>no_runbook var</th><th>runbook prod</th><th>runbook var</th></tr></thead>
+<tbody>
+<tr><td>형식</td><td>15/15</td><td>25/25</td><td>15/15</td><td>25/25</td></tr>
+<tr><td>언어</td><td>15/15</td><td>24/25</td><td>15/15</td><td>25/25</td></tr>
+<tr><td>원인</td><td>11/15</td><td>17/25</td><td>15/15</td><td>25/25</td></tr>
+<tr><td>확인</td><td>7/15</td><td>15/25</td><td>13/15</td><td>25/25</td></tr>
+<tr><td>환각 없음</td><td>12/15</td><td>20/25</td><td>15/15</td><td>24/25</td></tr>
+<tr><td>통과</td><td>4/15</td><td>10/25</td><td>13/15</td><td>24/25</td></tr>
+</tbody>
+</table>
+<h2>③ 재현성 (prod 3회의 글이 모두 같은 시나리오 수)</h2>
+<table>
+<thead><tr><th>조건</th><th>같은 시나리오 수</th><th>같았던 시나리오</th></tr></thead>
+<tbody>
+<tr><td>no_runbook</td><td>0/5</td><td>-</td></tr>
+<tr><td>runbook</td><td>1/5</td><td>s2_db_down</td></tr>
+</tbody>
+</table>
+<h2>④ 환각 목록 (걸린 금지 키워드, 지어낸 숫자)</h2>
+<table>
+<thead><tr><th>시나리오</th><th>조건</th><th>금지 키워드</th><th>지어낸 숫자</th><th>횟수</th></tr></thead>
+<tbody>
+<tr><td>s1_error_spike</td><td>no_runbook</td><td>메모리, CPU</td><td>-</td><td>5</td></tr>
+<tr><td>s1_error_spike</td><td>no_runbook</td><td>배포</td><td>-</td><td>1</td></tr>
+<tr><td>s2_db_down</td><td>no_runbook</td><td>CPU</td><td>-</td><td>1</td></tr>
+<tr><td>s3_latency</td><td>no_runbook</td><td>-</td><td>80</td><td>2</td></tr>
+<tr><td>s4_app_down</td><td>no_runbook</td><td>-</td><td>80</td><td>6</td></tr>
+<tr><td>s4_app_down</td><td>runbook</td><td>/error</td><td>-</td><td>1</td></tr>
+<tr><td>s5_weak_signal</td><td>no_runbook</td><td>메모리, CPU</td><td>-</td><td>1</td></tr>
+</tbody>
+</table>
+<p>지어낸 숫자는 보고용이며 통과 판정에 쓰지 않는다.</p>
+<h2>⑤ 시간 (조건별 시나리오)</h2>
+<table>
+<thead><tr><th>시나리오</th><th>조건</th><th>호출</th><th>wall_ms 평균</th><th>wall_ms 최대</th><th>prompt 토큰 평균</th><th>캐시 재사용 평균</th><th>출력 토큰 평균</th><th>실패 이유</th></tr></thead>
+<tbody>
+<tr><td>s1_error_spike</td><td>no_runbook</td><td>8</td><td>1486</td><td>3989</td><td>374</td><td>326</td><td>143</td><td>-</td></tr>
+<tr><td>s1_error_spike</td><td>runbook</td><td>8</td><td>1214</td><td>1423</td><td>1056</td><td>946</td><td>152</td><td>-</td></tr>
+<tr><td>s2_db_down</td><td>no_runbook</td><td>8</td><td>904</td><td>1081</td><td>369</td><td>350</td><td>113</td><td>-</td></tr>
+<tr><td>s2_db_down</td><td>runbook</td><td>8</td><td>1153</td><td>1339</td><td>1051</td><td>1032</td><td>146</td><td>-</td></tr>
+<tr><td>s3_latency</td><td>no_runbook</td><td>8</td><td>1018</td><td>1386</td><td>351</td><td>332</td><td>128</td><td>-</td></tr>
+<tr><td>s3_latency</td><td>runbook</td><td>8</td><td>1220</td><td>1361</td><td>1033</td><td>1014</td><td>155</td><td>-</td></tr>
+<tr><td>s4_app_down</td><td>no_runbook</td><td>8</td><td>699</td><td>849</td><td>303</td><td>290</td><td>85</td><td>-</td></tr>
+<tr><td>s4_app_down</td><td>runbook</td><td>8</td><td>1226</td><td>1681</td><td>985</td><td>972</td><td>155</td><td>-</td></tr>
+<tr><td>s5_weak_signal</td><td>no_runbook</td><td>8</td><td>956</td><td>1179</td><td>340</td><td>322</td><td>121</td><td>-</td></tr>
+<tr><td>s5_weak_signal</td><td>runbook</td><td>8</td><td>1200</td><td>1396</td><td>1022</td><td>1004</td><td>150</td><td>-</td></tr>
+</tbody>
+</table>
+<h2>⑥ 사람이 볼 시트 (prod 첫 호출의 답)</h2>
+<h3>s1_error_spike / no_runbook</h3>
+<ul>
+<li>제목: 특정 경로(/error)에 5xx가 몰린 에러 급증 (R1)</li>
+<li>정답 설명: /error 경로가 항상 RuntimeError로 500을 낸다. 5xx 478건이 모두 /error이고 /는 정상이다. 앱 내부 예외이며 DB·인프라 문제가 아니다.</li>
+<li>요약: 서비스는 /error 경로에서 대량의 5xx 오류를 보고 있으며, 요청 처리에 문제가 있을 가능성이 크다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>: /error 경로의 비즈니스 로직에서 오류가 발생할 수 있으며, 서버 리소스 부족이 원인일 수도 있다.</li>
+<li>: 요청 처리 시간이 길어지면서 오버헤드가 증가하여 오류가 발생할 수 있다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>: /error 경로의 로그를 확인하여 오류 발생 원인을 파악한다.</li>
+<li>: 서버의 CPU와 메모리 사용량을 모니터링하여 리소스 부족 여부를 확인한다.</li>
+</ol>
+<ul>
+<li>자동 판정: 탈락</li>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s1_error_spike / runbook</h3>
+<ul>
+<li>제목: 특정 경로(/error)에 5xx가 몰린 에러 급증 (R1)</li>
+<li>정답 설명: /error 경로가 항상 RuntimeError로 500을 낸다. 5xx 478건이 모두 /error이고 /는 정상이다. 앱 내부 예외이며 DB·인프라 문제가 아니다.</li>
+<li>요약: 최근 60초에 520건의 요청 중 478건이 5xx 오류를 내며 오류율이 0.92로 매우 높아져 서비스가 중단 위기에 처해 있다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/error 경로에서 RuntimeError가 478건 발생하여 5xx 오류를 내고 있다.</li>
+<li>DB 연결 문제로 / 경로에서 5xx 오류가 발생할 수 있다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>5xx 오류가 /error 경로에 몰렸는지 확인한다.</li>
+<li>docker compose logs db를 통해 DB 연결 상태를 확인한다.</li>
+</ol>
+<ul>
+<li>자동 판정: 통과</li>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s2_db_down / no_runbook</h3>
+<ul>
+<li>제목: DB 연결 실패로 / 가 느리게 500을 내는 장애 (R1)</li>
+<li>정답 설명: / 가 db 연결에 실패해 3초(연결 대기) 뒤 500(OperationalError)을 낸다. /healthz는 DB를 보지 않아 정상이다. 원인은 db 컨테이너 쪽이다.</li>
+<li>요약: 서비스가 다운된 것으로 보이며, 5xx 오류가 300건 발생하여 총 요청의 94%를 차지하고 있습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>: R1 규칙이 작동하여 5xx 오류가 발생하고 있습니다.</li>
+<li>서버 부하가 과도하여 OperationalError가 발생하고 있습니다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>: R1 규칙을 확인하고 조정해야 합니다.</li>
+<li>서버 로그를 분석하여 부하 상황을 확인해야 합니다.</li>
+</ol>
+<ul>
+<li>자동 판정: 탈락</li>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s2_db_down / runbook</h3>
+<ul>
+<li>제목: DB 연결 실패로 / 가 느리게 500을 내는 장애 (R1)</li>
+<li>정답 설명: / 가 db 연결에 실패해 3초(연결 대기) 뒤 500(OperationalError)을 낸다. /healthz는 DB를 보지 않아 정상이다. 원인은 db 컨테이너 쪽이다.</li>
+<li>요약: 최근 60초 동안 / 경로에서 5xx 오류가 300건 발생하여 5xx 비율이 94%로 급증하였고, p95 응답 시간이 3000ms로 증가하였다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>DB 연결 실패로 인한 / 경로의 500 오류</li>
+<li>DB 준비되지 않아 앱이 시작되지 않은 것</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>docker compose ps로 db와 app 상태를 확인한다.</li>
+<li>docker compose logs db와 app을 통해 DB 연결 상태와 앱 시작 여부를 확인한다.</li>
+</ol>
+<ul>
+<li>자동 판정: 통과</li>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s3_latency / no_runbook</h3>
+<ul>
+<li>제목: /slow 요청이 워커를 붙잡아 p95가 오른 지연 (R2)</li>
+<li>정답 설명: /slow 요청(3.2초)이 sync 워커 2개를 붙잡아 다른 요청이 대기한다. 오류는 없고 지연만 늘었다.</li>
+<li>요약: 요청 수가 기준선보다 적지만 p95 지연 시간이 경고 수준인 3200ms를 초과하고 있습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>:80 통신 경로의 네트워크 지연이 있을 수 있습니다.</li>
+<li>서버 측 로직에서 비동기 처리가 지연될 수 있습니다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>:80 통신 지연 확인을 위해 네트워크 도구 사용</li>
+<li>서버 로그에서 비동기 처리 시간 확인</li>
+</ol>
+<ul>
+<li>자동 판정: 통과</li>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s3_latency / runbook</h3>
+<ul>
+<li>제목: /slow 요청이 워커를 붙잡아 p95가 오른 지연 (R2)</li>
+<li>정답 설명: /slow 요청(3.2초)이 sync 워커 2개를 붙잡아 다른 요청이 대기한다. 오류는 없고 지연만 늘었다.</li>
+<li>요약: 최근 60초 창에서 p95가 3200ms를 초과하여 규칙 R2가 켜졌지만 5xx 오류는 발생하지 않았습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/slow 경로에 느린 요청이 몰려 워커가 포화되어 전체 응답 시간이 늘어났다.</li>
+<li>gunicorn 워커 2개 중 하나가 느린 요청에 걸려 전체 처리 속도가 느려졌다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>/slow 경로의 요청이 평소와 비교해 증가했는지 확인한다.</li>
+<li>docker compose logs app에서 느린 요청과 그 시점의 로그를 확인한다.</li>
+</ol>
+<ul>
+<li>자동 판정: 통과</li>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s4_app_down / no_runbook</h3>
+<ul>
+<li>제목: 앱이 응답하지 않아 프로브가 연속 실패한 장애 (R4, 로그 집계 없음)</li>
+<li>정답 설명: app 컨테이너가 정지했거나 재시작 중이라 /healthz에 응답이 없다. 로그 집계가 없으므로 에러율·지연 같은 숫자를 근거로 삼으면 안 된다.</li>
+<li>요약: 서버가 DNS 관련 오류로 인해 요청을 처리하지 못하고 있습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>:80의 DNS 요청이 실패하여 서버가 응답하지 못하고 있습니다.</li>
+<li>네트워크 연결 문제로 인해 DNS 정보를 가져올 수 없습니다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>:80의 DNS 요청을 확인하세요.</li>
+<li>DNS 서버 상태를 확인하세요.</li>
+</ol>
+<ul>
+<li>자동 판정: 탈락</li>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s4_app_down / runbook</h3>
+<ul>
+<li>제목: 앱이 응답하지 않아 프로브가 연속 실패한 장애 (R4, 로그 집계 없음)</li>
+<li>정답 설명: app 컨테이너가 정지했거나 재시작 중이라 /healthz에 응답이 없다. 로그 집계가 없으므로 에러율·지연 같은 숫자를 근거로 삼으면 안 된다.</li>
+<li>요약: Watcher가 15초마다 /healthz를 호출했으나 2초 안에 응답이 없어 연속 실패 2회 발생했으며, 이는 app 컨테이너가 정지하거나 DB 접속 실패로 인한 것으로 보인다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/healthz가 응답하지 않으므로 app 컨테이너가 정지하거나 재시작 중인 것</li>
+<li>DB가 준비되지 않아 app 컨테이너가 시작되지 않은 것</li>
+<li>느린 요청이 워커를 포화 상태로 만들어 /healthz도 응답하지 못한 것</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>docker compose ps로 app과 db 컨테이너가 실행 중인지 확인</li>
+<li>docker compose logs app의 마지막 줄을 확인하여 정지 직전 상태를 파악</li>
+<li>gunicorn 워커 상태를 확인하여 느린 요청이 전체 처리량에 영향을 미쳤는지 확인</li>
+</ol>
+<ul>
+<li>자동 판정: 통과</li>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s5_weak_signal / no_runbook</h3>
+<ul>
+<li>제목: 오류·지연 없이 요청만 줄어든 약한 신호 (R3)</li>
+<li>정답 설명: 요청 수만 기준선보다 줄었고 오류·지연·프로브는 정상이다. 근거가 부족하므로 원인은 알 수 없음이 정답이다(클라이언트 유입 감소 정도만 말할 수 있다).</li>
+<li>요약: rpm 120의 경고 규칙이 켜져 있고, 분당 요청 수가 평소보다 적어 서비스 부하가 줄었음</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>:/ 경로의 요청 수가 감소하여 rpm 120 규칙이 경고</li>
+<li>서버 유지보수나 점검이 진행되어 요청이 줄어들었음</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>:/ 경로의 요청 수를 확인하고, 최근 서버 상태를 점검</li>
+<li>로그 파일을 확인하여 최근 변경 사항이나 유지보수 작업을 확인</li>
+</ol>
+<ul>
+<li>자동 판정: 통과</li>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s5_weak_signal / runbook</h3>
+<ul>
+<li>제목: 오류·지연 없이 요청만 줄어든 약한 신호 (R3)</li>
+<li>정답 설명: 요청 수만 기준선보다 줄었고 오류·지연·프로브는 정상이다. 근거가 부족하므로 원인은 알 수 없음이 정답이다(클라이언트 유입 감소 정도만 말할 수 있다).</li>
+<li>요약: 최근 60초 동안 분당 요청 수가 120건으로 감소했지만 5xx 오류는 발생하지 않았다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>처리량이 감소했지만 5xx 오류가 발생하지 않았으므로 앱의 처리량이 충분한 상태에서 다른 요인으로 인한 요청 감소가 원인일 수 있다.</li>
+<li>규칙 R3이 켜졌으므로 앱의 처리량이 감소했을 가능성이 크다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>최근 앱 로그를 확인하여 앱의 상태가 정상인지 확인한다.</li>
+<li>최근 요청 로그를 확인하여 느린 요청이 발생했는지 확인한다.</li>
+</ol>
+<ul>
+<li>자동 판정: 통과</li>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+</main>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "summary": "AI에게 보낼 글과 답을 만드는 설정을 정하는 단계입니다.",
+  "easy": "AI에게 보낼 글과, 답을 어떻게 만들지 정하는 설정(temperature, seed, num_predict, num_ctx)을 고르는 단계입니다. 이 값들이 바뀌면 같은 글에도 다른 답이 나옵니다.",
+  "precise": "프롬프트의 글자 수와 UTF-8 바이트 수, 그리고 Ollama options를 기록합니다. 설정은 서버가 검사한 값입니다(temperature 0~1.5, num_predict 1~512, num_ctx 2048/4096/8192, seed는 비우면 Ollama가 임의로 정함).",
+  "failures": [
+    "프롬프트가 8000자를 넘으면 거절됩니다.",
+    "model이 목록에 없으면 거절됩니다."
+  ],
+  "unverified": [
+    "seed를 비웠을 때 Ollama가 실제로 쓴 값은 응답에 나오지 않아 확인하지 못했습니다."
+  ]
+}

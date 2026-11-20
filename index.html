@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>파이프라인 탐험</title>
+<link rel="stylesheet" href="./css/site.css">
+<!-- 저장된 색상 선택을 처음 그리기 전에 반영한다(깜빡임 방지). 인라인 스크립트는 CSP가 막으므로 외부 파일이다. -->
+<script src="./js/theme.js"></script>
+<script type="module" src="./js/app.js"></script>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/">파이프라인 탐험</a>
+  <nav aria-label="주 메뉴">
+    <a href="#/" data-nav="home">홈</a>
+    <a href="#/play" data-nav="play">놀이터</a>
+  </nav>
+  <div class="theme" role="group" aria-label="화면 색상">
+    <button type="button" data-theme-choice="system" aria-pressed="true">시스템</button>
+    <button type="button" data-theme-choice="light" aria-pressed="false">밝게</button>
+    <button type="button" data-theme-choice="dark" aria-pressed="false">어둡게</button>
+  </div>
+</header>
+<main id="view" tabindex="-1"><p class="meta">불러오는 중…</p></main>
+<noscript><p class="meta">이 페이지는 JavaScript가 필요합니다.</p></noscript>
+</body>
+</html>

@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "run_id": "r-20261103-054305-a3cd",
+  "created_at": "2026-11-03T05:43:05.338Z",
+  "kind": "incident",
+  "title": "incident #0012 window",
+  "exportable": true,
+  "redaction": {
+    "applied": false,
+    "note": "공개 검사 통과(허용 목록, 패턴 검사). 마스킹은 하지 않았고 원문 로그를 AI에 보내지 않는 방식이다"
+  },
+  "environment": {
+    "ollama_version": "0.40.2",
+    "model": "qwen2.5:7b",
+    "prompt_version": "v1"
+  },
+  "settings": {
+    "temperature": 0.0,
+    "seed": 42,
+    "top_k": 40,
+    "top_p": 0.9,
+    "repeat_penalty": 1.0,
+    "num_predict": 512,
+    "num_ctx": 4096
+  },
+  "status": "ok",
+  "error": null,
+  "stages": [
+    {
+      "id": "evidence",
+      "status": "ok",
+      "duration_ms": null,
+      "evidence": {
+        "*": "computed",
+        "top_error_kinds": "measured",
+        "top_paths": "measured",
+        "probe": "measured"
+      },
+      "output": {
+        "incident": {
+          "id": 12,
+          "severity": "critical",
+          "opened_min_ago": 0,
+          "fired_rules": [
+            {
+              "rule": "R1",
+              "detail": "error_rate 0.38, 5xx 180/480"
+            }
+          ]
+        },
+        "window": {
+          "sec": 60,
+          "requests": 480,
+          "errors_5xx": 180,
+          "error_rate": 0.375,
+          "p95_ms": 25.3,
+          "rpm": 480.0
+        },
+        "baseline": {
+          "rpm": 300.0
+        },
+        "top_error_kinds": [
+          {
+            "kind": "RuntimeError",
+            "count": 180
+          }
+        ],
+        "top_paths": [
+          {
+            "path": "/",
+            "count": 300,
+            "status_counts": {
+              "2xx": 300,
+              "4xx": 0,
+              "5xx": 0
+            }
+          },
+          {
+            "path": "/error",
+            "count": 180,
+            "status_counts": {
+              "2xx": 0,
+              "4xx": 0,
+              "5xx": 180
+            }
+          }
+        ],
+        "probe": {
+          "consecutive_failures": 0,
+          "last_reason_code": "HTTP 200"
+        },
+        "records_available": true
+      },
+      "notes": []
+    },
+    {
+      "id": "prompt",
+      "status": "ok",
+      "duration_ms": 0.076,
+      "evidence": {
+        "*": "computed",
+        "version": "input",
+        "user": "input"
+      },
+      "output": {
+        "version": "v1",
+        "system_sha256": "2c5d43ac6f7ffb90662d33ba0f707d6ac5cfcc4b75ba5396cf8ba947f7db195e",
+        "system_chars": 1412,
+        "user": "[장애 요약]\n장애 #12 · 심각도 critical · 시작 방금 · 켜진 규칙: R1(error_rate 0.38, 5xx 180/480)\n[최근 60초] 요청 480 · 5xx 180 · 에러율 0.38 · p95 25ms · 분당 요청 480\n[기준선] 평소 분당 요청 300\n[오류 유형] RuntimeError 180건\n[경로] / 300건(2xx 300) · /error 180건(5xx 180)\n[프로브] 연속 실패 0회 · 최근 결과 HTTP 200",
+        "est_tokens": 1672
+      },
+      "notes": []
+    },
+    {
+      "id": "llm_call",
+      "status": "ok",
+      "duration_ms": 1139.733,
+      "evidence": {
+        "*": "measured",
+        "model": "input",
+        "keep_alive": "input",
+        "options": "input",
+        "tok_s": "computed",
+        "outside_ollama_ms": "computed"
+      },
+      "output": {
+        "ok": true,
+        "reason": null,
+        "http_status": 200,
+        "done_reason": "stop",
+        "text": "{\"summary\": \"최근 60초에 5xx 오류가 180건 발생하여 오류율이 38%로 급증하였고, /error 경로에서 대부분의 오류가 발생하고 있다.\", \"causes\": [\"/error 경로에서 발생하는 RuntimeError가 원인일 가능성이 크다.\", \"DB 연결 문제로 인해 / 경로에서도 5xx 오류가 발생할 수 있다.\"], \"checks\": [\"/error 경로의 오류 로그를 확인하여 발생 원인을 파악한다.\", \"docker compose logs db를 확인하여 DB 연결 상태를 확인한다.\"]}",
+        "load_ms": 2.269,
+        "prompt_eval_count": 1057,
+        "prompt_eval_cached_count": 881,
+        "prompt_eval_ms": 29.565,
+        "eval_count": 139,
+        "eval_ms": 1074.413,
+        "total_ms": 1138.072,
+        "wall_ms": 1139.733,
+        "model": "qwen2.5:7b",
+        "keep_alive": "24h",
+        "options": {
+          "temperature": 0.0,
+          "seed": 42,
+          "top_k": 40,
+          "top_p": 0.9,
+          "repeat_penalty": 1.0,
+          "num_predict": 512,
+          "num_ctx": 4096
+        },
+        "tok_s": 129.37,
+        "outside_ollama_ms": 1.661
+      },
+      "notes": []
+    },
+    {
+      "id": "parse",
+      "status": "ok",
+      "duration_ms": null,
+      "evidence": {
+        "*": "computed"
+      },
+      "output": {
+        "ok": true,
+        "reason": null,
+        "flags": []
+      },
+      "notes": []
+    },
+    {
+      "id": "notify",
+      "status": "ok",
+      "duration_ms": 290.301,
+      "evidence": {
+        "*": "measured"
+      },
+      "output": {
+        "sent": true,
+        "kind": "ANALYSIS",
+        "mode": "webhook"
+      },
+      "notes": []
+    }
+  ],
+  "incident": {
+    "id": 12,
+    "trigger": "window"
+  }
+}

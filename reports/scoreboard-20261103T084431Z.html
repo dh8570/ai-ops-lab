@@ -1,0 +1,702 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>프롬프트 v2와 런북 선택 비교</title>
+<link rel="stylesheet" href="../css/site.css">
+</head>
+<body>
+<main>
+<h1>장애 분석 비교 채점표 (A1-T6a)</h1>
+<h2>조건</h2>
+<table>
+<thead><tr><th>항목</th><th>값</th></tr></thead>
+<tbody>
+<tr><td>실행 시각(UTC)</td><td>20261103T084431Z</td></tr>
+<tr><td>모델</td><td>qwen2.5:7b</td></tr>
+<tr><td>Ollama 버전</td><td>0.40.2</td></tr>
+<tr><td>PROMPT_VERSION</td><td>v1</td></tr>
+<tr><td>SYSTEM_PROMPT_V1 sha256</td><td>62aa479148e8ec8bd5ae74fc3534e9a5e31b0b1b5539e02468f0afb12b63f9e8</td></tr>
+<tr><td>옵션 7개 (prod x3, warm도 같음)</td><td>{&quot;temperature&quot;: 0.0, &quot;seed&quot;: 42, &quot;top_k&quot;: 40, &quot;top_p&quot;: 0.9, &quot;repeat_penalty&quot;: 1.0, &quot;num_predict&quot;: 512, &quot;num_ctx&quot;: 4096}</td></tr>
+<tr><td>옵션 7개 (var x5, seed 1~5)</td><td>{&quot;temperature&quot;: 0.2, &quot;seed&quot;: &quot;1~5&quot;, &quot;top_k&quot;: 40, &quot;top_p&quot;: 0.9, &quot;repeat_penalty&quot;: 1.0, &quot;num_predict&quot;: 512, &quot;num_ctx&quot;: 4096}</td></tr>
+<tr><td>keep_alive / 연결·총 제한(초)</td><td>24h / 5·30</td></tr>
+<tr><td>SYSTEM_PROMPT_V2 sha256</td><td>f4575ffd2359e617b29bfe85187b30da10eb125a36b296199e3ff3ca0e8d6af8</td></tr>
+<tr><td>조건</td><td>nr_v1=v1/none, all_v1=v1/all, all_v2=v2/all, match_v1=v1/match, match_v2=v2/match</td></tr>
+<tr><td>런북</td><td>1129자 (전체 런북. 런북 all 조건에서 사용, match는 규칙에 맞는 블록만)</td></tr>
+<tr><td>호출 수</td><td>495 (시나리오 11 x 조건 5, warmup 호출 55번 포함)</td></tr>
+<tr><td>채점 키워드 버전</td><td>v2</td></tr>
+<tr><td>주의</td><td>시나리오 숫자는 합성이며 실측이 아니다.</td></tr>
+</tbody>
+</table>
+<h2>① 시나리오 x 조건 통과율</h2>
+<table>
+<thead><tr><th>시나리오</th><th>nr_v1 warm(3회)</th><th>nr_v1 var(5회)</th><th>all_v1 warm(3회)</th><th>all_v1 var(5회)</th><th>all_v2 warm(3회)</th><th>all_v2 var(5회)</th><th>match_v1 warm(3회)</th><th>match_v1 var(5회)</th><th>match_v2 warm(3회)</th><th>match_v2 var(5회)</th></tr></thead>
+<tbody>
+<tr><td>s1_error_spike</td><td>0/3</td><td>1/5</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>0/3</td><td>0/5</td><td>3/3</td><td>3/5</td></tr>
+<tr><td>s2_db_down</td><td>0/3</td><td>1/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s3_latency</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s4_app_down</td><td>0/3</td><td>0/5</td><td>3/3</td><td>4/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s5_weak_signal</td><td>0/3</td><td>4/5</td><td>0/3</td><td>4/5</td><td>3/3</td><td>4/5</td><td>0/3</td><td>4/5</td><td>3/3</td><td>4/5</td></tr>
+<tr><td>s6_new_path_error</td><td>0/3</td><td>3/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s7_db_slow_combo</td><td>3/3</td><td>1/5</td><td>0/3</td><td>5/5</td><td>0/3</td><td>1/5</td><td>3/3</td><td>4/5</td><td>3/3</td><td>3/5</td></tr>
+<tr><td>s8_db_partial_fail</td><td>3/3</td><td>3/5</td><td>3/3</td><td>4/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>3/5</td><td>0/3</td><td>2/5</td></tr>
+<tr><td>s9_saturation</td><td>0/3</td><td>2/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>0/3</td><td>3/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td></tr>
+<tr><td>s11_probe_timeout</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>합계</td><td>6/33</td><td>18/55</td><td>21/33</td><td>42/55</td><td>27/33</td><td>45/55</td><td>24/33</td><td>41/55</td><td>27/33</td><td>42/55</td></tr>
+</tbody>
+</table>
+<h2>①-2 엄격 통과율 (strict_passed: 통과이고 근거 없는 원인 0개)</h2>
+<table>
+<thead><tr><th>시나리오</th><th>nr_v1 warm(3회)</th><th>nr_v1 var(5회)</th><th>all_v1 warm(3회)</th><th>all_v1 var(5회)</th><th>all_v2 warm(3회)</th><th>all_v2 var(5회)</th><th>match_v1 warm(3회)</th><th>match_v1 var(5회)</th><th>match_v2 warm(3회)</th><th>match_v2 var(5회)</th></tr></thead>
+<tbody>
+<tr><td>s1_error_spike</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>0/3</td><td>0/5</td><td>3/3</td><td>3/5</td></tr>
+<tr><td>s2_db_down</td><td>0/3</td><td>0/5</td><td>3/3</td><td>4/5</td><td>3/3</td><td>5/5</td><td>0/3</td><td>2/5</td><td>3/3</td><td>4/5</td></tr>
+<tr><td>s3_latency</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>1/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s4_app_down</td><td>0/3</td><td>0/5</td><td>3/3</td><td>4/5</td><td>3/3</td><td>5/5</td><td>0/3</td><td>2/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s5_weak_signal</td><td>0/3</td><td>2/5</td><td>0/3</td><td>3/5</td><td>0/3</td><td>2/5</td><td>0/3</td><td>2/5</td><td>0/3</td><td>1/5</td></tr>
+<tr><td>s6_new_path_error</td><td>0/3</td><td>2/5</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s7_db_slow_combo</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>1/5</td><td>0/3</td><td>1/5</td><td>3/3</td><td>3/5</td></tr>
+<tr><td>s8_db_partial_fail</td><td>0/3</td><td>0/5</td><td>3/3</td><td>2/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>3/5</td><td>0/3</td><td>2/5</td></tr>
+<tr><td>s9_saturation</td><td>0/3</td><td>1/5</td><td>3/3</td><td>4/5</td><td>3/3</td><td>4/5</td><td>0/3</td><td>3/5</td><td>3/3</td><td>3/5</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td></tr>
+<tr><td>s11_probe_timeout</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>합계</td><td>0/33</td><td>5/55</td><td>18/33</td><td>27/55</td><td>24/33</td><td>42/55</td><td>9/33</td><td>19/55</td><td>24/33</td><td>36/55</td></tr>
+</tbody>
+</table>
+<h2>①-3 엄격 v3 통과율 (엄격 통과 + 규칙 이름 되풀이 0개 + s5는 &quot;알 수 없음&quot; 필수)</h2>
+<table>
+<thead><tr><th>시나리오</th><th>nr_v1 warm(3회)</th><th>nr_v1 var(5회)</th><th>all_v1 warm(3회)</th><th>all_v1 var(5회)</th><th>all_v2 warm(3회)</th><th>all_v2 var(5회)</th><th>match_v1 warm(3회)</th><th>match_v1 var(5회)</th><th>match_v2 warm(3회)</th><th>match_v2 var(5회)</th></tr></thead>
+<tbody>
+<tr><td>s1_error_spike</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>0/3</td><td>0/5</td><td>3/3</td><td>3/5</td></tr>
+<tr><td>s2_db_down</td><td>0/3</td><td>0/5</td><td>3/3</td><td>4/5</td><td>3/3</td><td>5/5</td><td>0/3</td><td>2/5</td><td>3/3</td><td>4/5</td></tr>
+<tr><td>s3_latency</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>1/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s4_app_down</td><td>0/3</td><td>0/5</td><td>3/3</td><td>4/5</td><td>3/3</td><td>5/5</td><td>0/3</td><td>2/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s5_weak_signal</td><td>0/3</td><td>0/5</td><td>0/3</td><td>2/5</td><td>0/3</td><td>2/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>1/5</td></tr>
+<tr><td>s6_new_path_error</td><td>0/3</td><td>2/5</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s7_db_slow_combo</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>1/5</td><td>0/3</td><td>1/5</td><td>3/3</td><td>3/5</td></tr>
+<tr><td>s8_db_partial_fail</td><td>0/3</td><td>0/5</td><td>3/3</td><td>2/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>3/5</td><td>0/3</td><td>2/5</td></tr>
+<tr><td>s9_saturation</td><td>0/3</td><td>1/5</td><td>3/3</td><td>4/5</td><td>3/3</td><td>4/5</td><td>0/3</td><td>3/5</td><td>3/3</td><td>3/5</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td></tr>
+<tr><td>s11_probe_timeout</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>합계</td><td>0/33</td><td>3/55</td><td>18/33</td><td>26/55</td><td>24/33</td><td>42/55</td><td>9/33</td><td>17/55</td><td>24/33</td><td>36/55</td></tr>
+</tbody>
+</table>
+<h2>② 항목별 통과 수 (전체 시나리오 합)</h2>
+<p>원인·통과는 s5(expect_unknown)에서 통과 판정에 unknown_ok를 쓴다. 원인 열은 s5도 cause_ok 그대로 센다.</p>
+<table>
+<thead><tr><th>항목</th><th>nr_v1 warm</th><th>nr_v1 var</th><th>all_v1 warm</th><th>all_v1 var</th><th>all_v2 warm</th><th>all_v2 var</th><th>match_v1 warm</th><th>match_v1 var</th><th>match_v2 warm</th><th>match_v2 var</th></tr></thead>
+<tbody>
+<tr><td>형식</td><td>33/33</td><td>53/55</td><td>33/33</td><td>55/55</td><td>33/33</td><td>55/55</td><td>33/33</td><td>55/55</td><td>33/33</td><td>55/55</td></tr>
+<tr><td>언어</td><td>30/33</td><td>51/55</td><td>33/33</td><td>55/55</td><td>33/33</td><td>55/55</td><td>30/33</td><td>55/55</td><td>33/33</td><td>55/55</td></tr>
+<tr><td>원인</td><td>21/33</td><td>29/55</td><td>30/33</td><td>52/55</td><td>30/33</td><td>53/55</td><td>33/33</td><td>55/55</td><td>33/33</td><td>54/55</td></tr>
+<tr><td>확인</td><td>18/33</td><td>28/55</td><td>33/33</td><td>55/55</td><td>30/33</td><td>53/55</td><td>33/33</td><td>54/55</td><td>33/33</td><td>53/55</td></tr>
+<tr><td>환각 없음</td><td>21/33</td><td>42/55</td><td>24/33</td><td>43/55</td><td>30/33</td><td>46/55</td><td>24/33</td><td>42/55</td><td>27/33</td><td>44/55</td></tr>
+<tr><td>통과</td><td>6/33</td><td>18/55</td><td>21/33</td><td>42/55</td><td>27/33</td><td>45/55</td><td>24/33</td><td>41/55</td><td>27/33</td><td>42/55</td></tr>
+<tr><td>엄격 통과</td><td>0/33</td><td>5/55</td><td>18/33</td><td>27/55</td><td>24/33</td><td>42/55</td><td>9/33</td><td>19/55</td><td>24/33</td><td>36/55</td></tr>
+<tr><td>엄격 v3 통과</td><td>0/33</td><td>3/55</td><td>18/33</td><td>26/55</td><td>24/33</td><td>42/55</td><td>9/33</td><td>17/55</td><td>24/33</td><td>36/55</td></tr>
+<tr><td>규칙 이름 되풀이 원인(R1~R4, 보고용: 호출 수/원인 수)</td><td>0/0</td><td>7/8</td><td>0/0</td><td>0/0</td><td>0/0</td><td>0/0</td><td>0/0</td><td>2/3</td><td>0/0</td><td>0/0</td></tr>
+</tbody>
+</table>
+<h2>③ 재현성 (같은 설정 3회의 글이 모두 같은 시나리오 수)</h2>
+<table>
+<thead><tr><th>조건</th><th>warm 같은 시나리오 수</th><th>warm 같았던 시나리오</th></tr></thead>
+<tbody>
+<tr><td>nr_v1</td><td>11/11</td><td>s1_error_spike, s2_db_down, s3_latency, s4_app_down, s5_weak_signal, s6_new_path_error, s7_db_slow_combo, s8_db_partial_fail, s9_saturation, s10_5xx_no_detail, s11_probe_timeout</td></tr>
+<tr><td>all_v1</td><td>11/11</td><td>s1_error_spike, s2_db_down, s3_latency, s4_app_down, s5_weak_signal, s6_new_path_error, s7_db_slow_combo, s8_db_partial_fail, s9_saturation, s10_5xx_no_detail, s11_probe_timeout</td></tr>
+<tr><td>all_v2</td><td>11/11</td><td>s1_error_spike, s2_db_down, s3_latency, s4_app_down, s5_weak_signal, s6_new_path_error, s7_db_slow_combo, s8_db_partial_fail, s9_saturation, s10_5xx_no_detail, s11_probe_timeout</td></tr>
+<tr><td>match_v1</td><td>11/11</td><td>s1_error_spike, s2_db_down, s3_latency, s4_app_down, s5_weak_signal, s6_new_path_error, s7_db_slow_combo, s8_db_partial_fail, s9_saturation, s10_5xx_no_detail, s11_probe_timeout</td></tr>
+<tr><td>match_v2</td><td>11/11</td><td>s1_error_spike, s2_db_down, s3_latency, s4_app_down, s5_weak_signal, s6_new_path_error, s7_db_slow_combo, s8_db_partial_fail, s9_saturation, s10_5xx_no_detail, s11_probe_timeout</td></tr>
+</tbody>
+</table>
+<h2>④ 환각 목록 (걸린 금지 키워드, 지어낸 숫자)</h2>
+<table>
+<thead><tr><th>시나리오</th><th>조건</th><th>금지 키워드</th><th>지어낸 숫자</th><th>횟수</th></tr></thead>
+<tbody>
+<tr><td>s10_5xx_no_detail</td><td>all_v1</td><td>DB</td><td>-</td><td>9</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>all_v2</td><td>DB</td><td>-</td><td>6</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>all_v2</td><td>DB</td><td>21</td><td>2</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>all_v2</td><td>DB, 앱 정지</td><td>21</td><td>1</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>match_v1</td><td>DB</td><td>-</td><td>4</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>match_v1</td><td>DB</td><td>21</td><td>5</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>match_v2</td><td>DB</td><td>-</td><td>7</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>match_v2</td><td>DB, 앱 정지</td><td>-</td><td>2</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>nr_v1</td><td>-</td><td>8080</td><td>1</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>nr_v1</td><td>메모리, CPU</td><td>-</td><td>2</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>nr_v1</td><td>메모리, CPU</td><td>8080</td><td>4</td></tr>
+<tr><td>s11_probe_timeout</td><td>nr_v1</td><td>-</td><td>80</td><td>1</td></tr>
+<tr><td>s1_error_spike</td><td>all_v1</td><td>DB 연결</td><td>-</td><td>7</td></tr>
+<tr><td>s1_error_spike</td><td>all_v1</td><td>DB 연결</td><td>92</td><td>2</td></tr>
+<tr><td>s1_error_spike</td><td>match_v1</td><td>DB 연결</td><td>-</td><td>7</td></tr>
+<tr><td>s1_error_spike</td><td>match_v1</td><td>DB 연결</td><td>92</td><td>2</td></tr>
+<tr><td>s1_error_spike</td><td>match_v2</td><td>DB 연결</td><td>-</td><td>1</td></tr>
+<tr><td>s1_error_spike</td><td>nr_v1</td><td>-</td><td>92</td><td>1</td></tr>
+<tr><td>s1_error_spike</td><td>nr_v1</td><td>메모리, CPU</td><td>-</td><td>5</td></tr>
+<tr><td>s1_error_spike</td><td>nr_v1</td><td>메모리, CPU</td><td>92</td><td>1</td></tr>
+<tr><td>s1_error_spike</td><td>nr_v1</td><td>배포</td><td>-</td><td>1</td></tr>
+<tr><td>s2_db_down</td><td>all_v1</td><td>-</td><td>94</td><td>9</td></tr>
+<tr><td>s2_db_down</td><td>match_v2</td><td>-</td><td>94</td><td>1</td></tr>
+<tr><td>s2_db_down</td><td>nr_v1</td><td>CPU</td><td>-</td><td>2</td></tr>
+<tr><td>s3_latency</td><td>nr_v1</td><td>-</td><td>80</td><td>1</td></tr>
+<tr><td>s4_app_down</td><td>all_v1</td><td>/error</td><td>-</td><td>1</td></tr>
+<tr><td>s4_app_down</td><td>match_v1</td><td>-</td><td>8080</td><td>8</td></tr>
+<tr><td>s4_app_down</td><td>nr_v1</td><td>-</td><td>80</td><td>9</td></tr>
+<tr><td>s5_weak_signal</td><td>all_v2</td><td>앱 정지</td><td>-</td><td>1</td></tr>
+<tr><td>s5_weak_signal</td><td>match_v1</td><td>-</td><td>80</td><td>1</td></tr>
+<tr><td>s5_weak_signal</td><td>match_v1</td><td>메모리, CPU</td><td>-</td><td>4</td></tr>
+<tr><td>s5_weak_signal</td><td>nr_v1</td><td>-</td><td>80</td><td>1</td></tr>
+<tr><td>s5_weak_signal</td><td>nr_v1</td><td>메모리, CPU</td><td>-</td><td>3</td></tr>
+<tr><td>s6_new_path_error</td><td>all_v1</td><td>-</td><td>57</td><td>9</td></tr>
+<tr><td>s6_new_path_error</td><td>match_v1</td><td>-</td><td>57</td><td>9</td></tr>
+<tr><td>s6_new_path_error</td><td>match_v2</td><td>-</td><td>57</td><td>1</td></tr>
+<tr><td>s6_new_path_error</td><td>nr_v1</td><td>메모리, CPU</td><td>57</td><td>2</td></tr>
+<tr><td>s6_new_path_error</td><td>nr_v1</td><td>메모리, CPU</td><td>8080</td><td>4</td></tr>
+<tr><td>s7_db_slow_combo</td><td>all_v1</td><td>-</td><td>87</td><td>6</td></tr>
+<tr><td>s7_db_slow_combo</td><td>all_v1</td><td>워커 포화</td><td>87</td><td>3</td></tr>
+<tr><td>s7_db_slow_combo</td><td>all_v2</td><td>/slow</td><td>-</td><td>2</td></tr>
+<tr><td>s7_db_slow_combo</td><td>all_v2</td><td>/slow, 워커 포화</td><td>-</td><td>1</td></tr>
+<tr><td>s7_db_slow_combo</td><td>match_v1</td><td>-</td><td>87</td><td>8</td></tr>
+<tr><td>s7_db_slow_combo</td><td>match_v1</td><td>/slow</td><td>87</td><td>1</td></tr>
+<tr><td>s7_db_slow_combo</td><td>match_v2</td><td>워커 포화</td><td>-</td><td>3</td></tr>
+<tr><td>s7_db_slow_combo</td><td>nr_v1</td><td>-</td><td>80</td><td>4</td></tr>
+<tr><td>s7_db_slow_combo</td><td>nr_v1</td><td>메모리, CPU</td><td>80</td><td>2</td></tr>
+<tr><td>s8_db_partial_fail</td><td>all_v1</td><td>-</td><td>83</td><td>3</td></tr>
+<tr><td>s8_db_partial_fail</td><td>all_v1</td><td>/error</td><td>-</td><td>1</td></tr>
+<tr><td>s8_db_partial_fail</td><td>match_v1</td><td>-</td><td>83</td><td>1</td></tr>
+<tr><td>s8_db_partial_fail</td><td>match_v1</td><td>/error</td><td>-</td><td>1</td></tr>
+<tr><td>s8_db_partial_fail</td><td>match_v1</td><td>/error</td><td>83</td><td>1</td></tr>
+<tr><td>s8_db_partial_fail</td><td>match_v2</td><td>/error</td><td>-</td><td>7</td></tr>
+<tr><td>s8_db_partial_fail</td><td>nr_v1</td><td>-</td><td>80</td><td>1</td></tr>
+<tr><td>s8_db_partial_fail</td><td>nr_v1</td><td>-</td><td>83</td><td>6</td></tr>
+<tr><td>s9_saturation</td><td>nr_v1</td><td>-</td><td>80</td><td>4</td></tr>
+</tbody>
+</table>
+<p>지어낸 숫자는 보고용이며 통과 판정에 쓰지 않는다.</p>
+<h2>⑤ 시간 (조건별 시나리오)</h2>
+<table>
+<thead><tr><th>시나리오</th><th>조건</th><th>호출</th><th>wall_ms 평균</th><th>wall_ms 최대</th><th>prompt 토큰 평균</th><th>캐시 재사용 평균</th><th>출력 토큰 평균</th><th>설정별 캐시 재사용 평균</th><th>실패 이유</th></tr></thead>
+<tbody>
+<tr><td>s1_error_spike</td><td>nr_v1</td><td>9</td><td>1458</td><td>3976</td><td>374</td><td>332</td><td>144</td><td>warmup 0 / warm 373 / var 373</td><td>-</td></tr>
+<tr><td>s1_error_spike</td><td>all_v1</td><td>9</td><td>1201</td><td>1429</td><td>1056</td><td>958</td><td>151</td><td>warmup 185 / warm 1055 / var 1055</td><td>-</td></tr>
+<tr><td>s1_error_spike</td><td>all_v2</td><td>9</td><td>899</td><td>1013</td><td>1233</td><td>1101</td><td>110</td><td>warmup 53 / warm 1232 / var 1232</td><td>-</td></tr>
+<tr><td>s1_error_spike</td><td>match_v1</td><td>9</td><td>974</td><td>1123</td><td>596</td><td>549</td><td>121</td><td>warmup 185 / warm 595 / var 595</td><td>-</td></tr>
+<tr><td>s1_error_spike</td><td>match_v2</td><td>9</td><td>912</td><td>1200</td><td>773</td><td>751</td><td>115</td><td>warmup 584 / warm 772 / var 772</td><td>-</td></tr>
+<tr><td>s2_db_down</td><td>nr_v1</td><td>9</td><td>800</td><td>1042</td><td>369</td><td>348</td><td>99</td><td>warmup 185 / warm 368 / var 368</td><td>-</td></tr>
+<tr><td>s2_db_down</td><td>all_v1</td><td>9</td><td>1150</td><td>1331</td><td>1051</td><td>1034</td><td>145</td><td>warmup 909 / warm 1050 / var 1050</td><td>-</td></tr>
+<tr><td>s2_db_down</td><td>all_v2</td><td>9</td><td>888</td><td>995</td><td>1228</td><td>1156</td><td>109</td><td>warmup 584 / warm 1227 / var 1227</td><td>-</td></tr>
+<tr><td>s2_db_down</td><td>match_v1</td><td>9</td><td>806</td><td>1203</td><td>591</td><td>545</td><td>101</td><td>warmup 185 / warm 590 / var 590</td><td>-</td></tr>
+<tr><td>s2_db_down</td><td>match_v2</td><td>9</td><td>1015</td><td>1217</td><td>768</td><td>747</td><td>128</td><td>warmup 584 / warm 767 / var 767</td><td>-</td></tr>
+<tr><td>s3_latency</td><td>nr_v1</td><td>9</td><td>871</td><td>1296</td><td>351</td><td>317</td><td>108</td><td>warmup 53 / warm 350 / var 350</td><td>-</td></tr>
+<tr><td>s3_latency</td><td>all_v1</td><td>9</td><td>1220</td><td>1355</td><td>1033</td><td>1016</td><td>155</td><td>warmup 886 / warm 1032 / var 1032</td><td>-</td></tr>
+<tr><td>s3_latency</td><td>all_v2</td><td>9</td><td>1093</td><td>1355</td><td>1210</td><td>1140</td><td>135</td><td>warmup 584 / warm 1209 / var 1209</td><td>-</td></tr>
+<tr><td>s3_latency</td><td>match_v1</td><td>9</td><td>1245</td><td>1358</td><td>575</td><td>531</td><td>155</td><td>warmup 191 / warm 574 / var 574</td><td>-</td></tr>
+<tr><td>s3_latency</td><td>match_v2</td><td>9</td><td>1034</td><td>1146</td><td>752</td><td>708</td><td>130</td><td>warmup 368 / warm 751 / var 751</td><td>-</td></tr>
+<tr><td>s4_app_down</td><td>nr_v1</td><td>9</td><td>691</td><td>969</td><td>303</td><td>291</td><td>84</td><td>warmup 204 / warm 302 / var 302</td><td>-</td></tr>
+<tr><td>s4_app_down</td><td>all_v1</td><td>9</td><td>1221</td><td>1701</td><td>985</td><td>973</td><td>153</td><td>warmup 886 / warm 984 / var 984</td><td>-</td></tr>
+<tr><td>s4_app_down</td><td>all_v2</td><td>9</td><td>801</td><td>1005</td><td>1162</td><td>1073</td><td>99</td><td>warmup 368 / warm 1161 / var 1161</td><td>-</td></tr>
+<tr><td>s4_app_down</td><td>match_v1</td><td>9</td><td>1194</td><td>1561</td><td>541</td><td>501</td><td>150</td><td>warmup 191 / warm 540 / var 540</td><td>-</td></tr>
+<tr><td>s4_app_down</td><td>match_v2</td><td>9</td><td>900</td><td>1129</td><td>718</td><td>678</td><td>114</td><td>warmup 368 / warm 717 / var 717</td><td>-</td></tr>
+<tr><td>s5_weak_signal</td><td>nr_v1</td><td>9</td><td>1217</td><td>1535</td><td>340</td><td>324</td><td>152</td><td>warmup 204 / warm 339 / var 339</td><td>-</td></tr>
+<tr><td>s5_weak_signal</td><td>all_v1</td><td>9</td><td>1199</td><td>1381</td><td>1022</td><td>1006</td><td>152</td><td>warmup 886 / warm 1021 / var 1021</td><td>-</td></tr>
+<tr><td>s5_weak_signal</td><td>all_v2</td><td>9</td><td>1153</td><td>1300</td><td>1199</td><td>1106</td><td>142</td><td>warmup 368 / warm 1198 / var 1198</td><td>-</td></tr>
+<tr><td>s5_weak_signal</td><td>match_v1</td><td>9</td><td>1266</td><td>1564</td><td>340</td><td>339</td><td>159</td><td>warmup 339 / warm 339 / var 339</td><td>-</td></tr>
+<tr><td>s5_weak_signal</td><td>match_v2</td><td>9</td><td>966</td><td>1129</td><td>517</td><td>499</td><td>122</td><td>warmup 362 / warm 516 / var 516</td><td>-</td></tr>
+<tr><td>s6_new_path_error</td><td>nr_v1</td><td>9</td><td>936</td><td>1138</td><td>376</td><td>356</td><td>117</td><td>warmup 204 / warm 375 / var 375</td><td>-</td></tr>
+<tr><td>s6_new_path_error</td><td>all_v1</td><td>9</td><td>1140</td><td>1338</td><td>1058</td><td>1038</td><td>144</td><td>warmup 886 / warm 1057 / var 1057</td><td>-</td></tr>
+<tr><td>s6_new_path_error</td><td>all_v2</td><td>9</td><td>854</td><td>986</td><td>1235</td><td>1137</td><td>104</td><td>warmup 362 / warm 1234 / var 1234</td><td>-</td></tr>
+<tr><td>s6_new_path_error</td><td>match_v1</td><td>9</td><td>1157</td><td>1498</td><td>598</td><td>576</td><td>145</td><td>warmup 407 / warm 597 / var 597</td><td>-</td></tr>
+<tr><td>s6_new_path_error</td><td>match_v2</td><td>9</td><td>928</td><td>1060</td><td>775</td><td>753</td><td>118</td><td>warmup 584 / warm 774 / var 774</td><td>-</td></tr>
+<tr><td>s7_db_slow_combo</td><td>nr_v1</td><td>9</td><td>1562</td><td>4120</td><td>381</td><td>363</td><td>195</td><td>warmup 226 / warm 380 / var 380</td><td>truncated</td></tr>
+<tr><td>s7_db_slow_combo</td><td>all_v1</td><td>9</td><td>1309</td><td>1436</td><td>1063</td><td>989</td><td>165</td><td>warmup 407 / warm 1062 / var 1062</td><td>-</td></tr>
+<tr><td>s7_db_slow_combo</td><td>all_v2</td><td>9</td><td>1195</td><td>1463</td><td>1240</td><td>1166</td><td>149</td><td>warmup 584 / warm 1239 / var 1239</td><td>-</td></tr>
+<tr><td>s7_db_slow_combo</td><td>match_v1</td><td>9</td><td>1305</td><td>1425</td><td>826</td><td>803</td><td>165</td><td>warmup 630 / warm 825 / var 825</td><td>-</td></tr>
+<tr><td>s7_db_slow_combo</td><td>match_v2</td><td>9</td><td>1096</td><td>1665</td><td>1003</td><td>980</td><td>137</td><td>warmup 807 / warm 1002 / var 1002</td><td>-</td></tr>
+<tr><td>s8_db_partial_fail</td><td>nr_v1</td><td>9</td><td>1099</td><td>1305</td><td>389</td><td>370</td><td>139</td><td>warmup 227 / warm 388 / var 388</td><td>-</td></tr>
+<tr><td>s8_db_partial_fail</td><td>all_v1</td><td>9</td><td>1136</td><td>1479</td><td>1071</td><td>1021</td><td>142</td><td>warmup 630 / warm 1070 / var 1070</td><td>-</td></tr>
+<tr><td>s8_db_partial_fail</td><td>all_v2</td><td>9</td><td>843</td><td>915</td><td>1248</td><td>1198</td><td>105</td><td>warmup 807 / warm 1247 / var 1247</td><td>-</td></tr>
+<tr><td>s8_db_partial_fail</td><td>match_v1</td><td>9</td><td>1178</td><td>1550</td><td>611</td><td>587</td><td>148</td><td>warmup 407 / warm 610 / var 610</td><td>-</td></tr>
+<tr><td>s8_db_partial_fail</td><td>match_v2</td><td>9</td><td>936</td><td>998</td><td>788</td><td>764</td><td>118</td><td>warmup 584 / warm 787 / var 787</td><td>-</td></tr>
+<tr><td>s9_saturation</td><td>nr_v1</td><td>9</td><td>885</td><td>1549</td><td>363</td><td>344</td><td>111</td><td>warmup 204 / warm 362 / var 362</td><td>-</td></tr>
+<tr><td>s9_saturation</td><td>all_v1</td><td>9</td><td>1228</td><td>1395</td><td>1045</td><td>973</td><td>154</td><td>warmup 407 / warm 1044 / var 1044</td><td>-</td></tr>
+<tr><td>s9_saturation</td><td>all_v2</td><td>9</td><td>1005</td><td>1226</td><td>1222</td><td>1150</td><td>126</td><td>warmup 584 / warm 1221 / var 1221</td><td>-</td></tr>
+<tr><td>s9_saturation</td><td>match_v1</td><td>9</td><td>1333</td><td>1694</td><td>587</td><td>542</td><td>166</td><td>warmup 191 / warm 586 / var 586</td><td>-</td></tr>
+<tr><td>s9_saturation</td><td>match_v2</td><td>9</td><td>1105</td><td>1279</td><td>764</td><td>719</td><td>139</td><td>warmup 368 / warm 763 / var 763</td><td>-</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>nr_v1</td><td>9</td><td>981</td><td>1170</td><td>351</td><td>336</td><td>123</td><td>warmup 226 / warm 350 / var 350</td><td>-</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>all_v1</td><td>9</td><td>937</td><td>1176</td><td>1033</td><td>1016</td><td>117</td><td>warmup 886 / warm 1032 / var 1032</td><td>-</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>all_v2</td><td>9</td><td>980</td><td>1513</td><td>1210</td><td>1116</td><td>120</td><td>warmup 368 / warm 1209 / var 1209</td><td>-</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>match_v1</td><td>9</td><td>1039</td><td>1455</td><td>573</td><td>529</td><td>131</td><td>warmup 185 / warm 572 / var 572</td><td>-</td></tr>
+<tr><td>s10_5xx_no_detail</td><td>match_v2</td><td>9</td><td>905</td><td>1043</td><td>750</td><td>731</td><td>114</td><td>warmup 584 / warm 749 / var 749</td><td>-</td></tr>
+<tr><td>s11_probe_timeout</td><td>nr_v1</td><td>9</td><td>845</td><td>1109</td><td>301</td><td>291</td><td>106</td><td>warmup 220 / warm 300 / var 300</td><td>-</td></tr>
+<tr><td>s11_probe_timeout</td><td>all_v1</td><td>9</td><td>1243</td><td>1359</td><td>983</td><td>973</td><td>157</td><td>warmup 902 / warm 982 / var 982</td><td>-</td></tr>
+<tr><td>s11_probe_timeout</td><td>all_v2</td><td>9</td><td>1202</td><td>1303</td><td>1160</td><td>1095</td><td>149</td><td>warmup 584 / warm 1159 / var 1159</td><td>-</td></tr>
+<tr><td>s11_probe_timeout</td><td>match_v1</td><td>9</td><td>1085</td><td>1335</td><td>539</td><td>499</td><td>136</td><td>warmup 191 / warm 538 / var 538</td><td>-</td></tr>
+<tr><td>s11_probe_timeout</td><td>match_v2</td><td>9</td><td>971</td><td>1062</td><td>716</td><td>676</td><td>122</td><td>warmup 368 / warm 715 / var 715</td><td>-</td></tr>
+</tbody>
+</table>
+<h2>⑥ 사람이 볼 시트 (prod 첫 호출의 답)</h2>
+<h2>⑦ 조건 x 시나리오 묶음 통과 수 (warm과 var 합침)</h2>
+<p>설계 시나리오 7개, 보류 시나리오 4개. v1 규칙은 passed, strict_v3는 엄격 v3 통과다.</p>
+<table>
+<thead><tr><th>조건</th><th>설계 passed</th><th>설계 strict_v3</th><th>보류 passed</th><th>보류 strict_v3</th></tr></thead>
+<tbody>
+<tr><td>nr_v1</td><td>13/56</td><td>2/56</td><td>11/32</td><td>1/32</td></tr>
+<tr><td>all_v1</td><td>40/56</td><td>24/56</td><td>23/32</td><td>20/32</td></tr>
+<tr><td>all_v2</td><td>48/56</td><td>43/56</td><td>24/32</td><td>23/32</td></tr>
+<tr><td>match_v1</td><td>43/56</td><td>9/56</td><td>22/32</td><td>17/32</td></tr>
+<tr><td>match_v2</td><td>51/56</td><td>44/56</td><td>18/32</td><td>16/32</td></tr>
+</tbody>
+</table>
+<h2>⑧ 시나리오 x 조건 strict_v3 통과율 (warm 3회, var 5회)</h2>
+<table>
+<thead><tr><th>시나리오</th><th>nr_v1 warm</th><th>nr_v1 var</th><th>all_v1 warm</th><th>all_v1 var</th><th>all_v2 warm</th><th>all_v2 var</th><th>match_v1 warm</th><th>match_v1 var</th><th>match_v2 warm</th><th>match_v2 var</th></tr></thead>
+<tbody>
+<tr><td>s1_error_spike</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>0/3</td><td>0/5</td><td>3/3</td><td>3/5</td></tr>
+<tr><td>s2_db_down</td><td>0/3</td><td>0/5</td><td>3/3</td><td>4/5</td><td>3/3</td><td>5/5</td><td>0/3</td><td>2/5</td><td>3/3</td><td>4/5</td></tr>
+<tr><td>s3_latency</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>1/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s4_app_down</td><td>0/3</td><td>0/5</td><td>3/3</td><td>4/5</td><td>3/3</td><td>5/5</td><td>0/3</td><td>2/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s5_weak_signal</td><td>0/3</td><td>0/5</td><td>0/3</td><td>2/5</td><td>0/3</td><td>2/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>1/5</td></tr>
+<tr><td>s6_new_path_error</td><td>0/3</td><td>2/5</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td></tr>
+<tr><td>s7_db_slow_combo</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>1/5</td><td>0/3</td><td>1/5</td><td>3/3</td><td>3/5</td></tr>
+<tr><td>s8_db_partial_fail (보류)</td><td>0/3</td><td>0/5</td><td>3/3</td><td>2/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>3/5</td><td>0/3</td><td>2/5</td></tr>
+<tr><td>s9_saturation (보류)</td><td>0/3</td><td>1/5</td><td>3/3</td><td>4/5</td><td>3/3</td><td>4/5</td><td>0/3</td><td>3/5</td><td>3/3</td><td>3/5</td></tr>
+<tr><td>s10_5xx_no_detail (보류)</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td><td>0/3</td><td>0/5</td></tr>
+<tr><td>s11_probe_timeout (보류)</td><td>0/3</td><td>0/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td><td>3/3</td><td>5/5</td></tr>
+</tbody>
+</table>
+<h2>⑨ 조건별 prompt 토큰·시간 평균 (warmup 제외)</h2>
+<table>
+<thead><tr><th>조건</th><th>호출</th><th>추정 토큰 평균</th><th>prompt 토큰 평균</th><th>캐시 재사용 평균</th><th>wall_ms 평균</th></tr></thead>
+<tbody>
+<tr><td>nr_v1</td><td>88</td><td>508</td><td>354</td><td>353</td><td>1003</td></tr>
+<tr><td>all_v1</td><td>88</td><td>1639</td><td>1036</td><td>1035</td><td>1171</td></tr>
+<tr><td>all_v2</td><td>88</td><td>1903</td><td>1213</td><td>1212</td><td>980</td></tr>
+<tr><td>match_v1</td><td>88</td><td>882</td><td>580</td><td>579</td><td>1126</td></tr>
+<tr><td>match_v2</td><td>88</td><td>1146</td><td>757</td><td>756</td><td>969</td></tr>
+</tbody>
+</table>
+<h2>⑩ 사람이 볼 시트 (보류 시나리오 x 조건, warm 1번 호출의 답. 자동 판정은 적지 않음)</h2>
+<h3>s8_db_partial_fail / nr_v1</h3>
+<ul>
+<li>제목: DB 연결 실패가 여러 경로에서 5xx를 낸 장애 (R1, 보류)</li>
+<li>정답 설명: DB 연결 실패가 여러 경로(/, /checkout)에서 5xx를 낸다. 원인은 db 쪽이다.</li>
+<li>요약: 서비스의 /checkout 경로에서 5xx 오류가 빈번하게 발생하여 전체 요청의 83%가 실패하고 있으며, 이는 현재 critical 수준입니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>데이터베이스 연결 문제로 인한 OperationalError가 주된 원인일 가능성이 큽니다.</li>
+<li>checkout 경로의 로직에 문제가 있을 수 있으며, 이는 해당 경로의 높은 오류율을 반영합니다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>데이터베이스 연결 설정과 관련된 로그를 확인하여 OperationalError의 원인을 파악해야 합니다.</li>
+<li>checkout 경로의 코드를 검토하여 로직 오류가 있는지 확인해야 합니다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s8_db_partial_fail / all_v1</h3>
+<ul>
+<li>제목: DB 연결 실패가 여러 경로에서 5xx를 낸 장애 (R1, 보류)</li>
+<li>정답 설명: DB 연결 실패가 여러 경로(/, /checkout)에서 5xx를 낸다. 원인은 db 쪽이다.</li>
+<li>요약: 최근 60초 동안 앱은 5xx 오류를 대량으로 내며, 특히 /checkout 경로에서 5xx 비율이 높게 나타났다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/checkout 경로의 데이터베이스 연결 문제</li>
+<li>전체 앱의 데이터베이스 연결 문제</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>/checkout 경로의 데이터베이스 연결을 확인한다.</li>
+<li>전체 앱의 데이터베이스 연결 상태를 확인한다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s8_db_partial_fail / all_v2</h3>
+<ul>
+<li>제목: DB 연결 실패가 여러 경로에서 5xx를 낸 장애 (R1, 보류)</li>
+<li>정답 설명: DB 연결 실패가 여러 경로(/, /checkout)에서 5xx를 낸다. 원인은 db 쪽이다.</li>
+<li>요약: 5xx 오류 비율이 급증하여 서비스가 중단될 위기에 처해 있습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/ 경로에서 DB 연결 문제로 인한 OperationalError가 발생하고 있습니다.</li>
+<li>알 수 없음: 이유</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>docker compose logs db를 확인하여 DB 연결 문제를 확인합니다.</li>
+<li>docker compose ps로 db와 app 상태를 확인합니다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s8_db_partial_fail / match_v1</h3>
+<ul>
+<li>제목: DB 연결 실패가 여러 경로에서 5xx를 낸 장애 (R1, 보류)</li>
+<li>정답 설명: DB 연결 실패가 여러 경로(/, /checkout)에서 5xx를 낸다. 원인은 db 쪽이다.</li>
+<li>요약: 최근 60초에 앱과 DB 컨테이너 모두 문제를 보여 5xx 오류가 급증했습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/에 연결 문제가 있는 것으로 보입니다. DB 컨테이너가 응답하지 않거나 연결이 실패할 수 있습니다.</li>
+<li>/checkout 경로의 높은 5xx 비율은 해당 경로의 특정 문제 또는 DB 연결 실패가 원인일 수 있습니다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>docker compose ps로 DB와 앱 컨테이너의 상태를 확인합니다.</li>
+<li>docker compose logs db를 통해 DB 컨테이너의 로그를 확인하여 연결 문제를 확인합니다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s8_db_partial_fail / match_v2</h3>
+<ul>
+<li>제목: DB 연결 실패가 여러 경로에서 5xx를 낸 장애 (R1, 보류)</li>
+<li>정답 설명: DB 연결 실패가 여러 경로(/, /checkout)에서 5xx를 낸다. 원인은 db 쪽이다.</li>
+<li>요약: 5xx 오류가 급증하여 서비스가 중단될 위기에 처해 있습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/ 경로에서 DB 연결 문제로 인한 500 오류가 발생하고 있습니다.</li>
+<li>알 수 없음: 이유</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>docker compose ps로 db와 app 상태를 확인하고, docker compose logs db로 db 로그를 확인합니다.</li>
+<li>5xx 오류가 /error 경로에 몰렸는지 확인합니다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s9_saturation / nr_v1</h3>
+<ul>
+<li>제목: /slow가 워커를 붙잡아 처리량이 줄어든 포화 (R2+R3, 보류)</li>
+<li>정답 설명: /slow 요청이 sync 워커를 붙잡아 다른 요청이 대기하고 처리량이 줄었다.</li>
+<li>요약: 요청 수가 감소했지만 p95 지연이 높아져 warning 레벨의 장애가 발생했습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>:80 통신 문제</li>
+<li>서버 부하 증가</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>:80 통신 상태 확인</li>
+<li>CPU와 메모리 사용량 확인</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s9_saturation / all_v1</h3>
+<ul>
+<li>제목: /slow가 워커를 붙잡아 처리량이 줄어든 포화 (R2+R3, 보류)</li>
+<li>정답 설명: /slow 요청이 sync 워커를 붙잡아 다른 요청이 대기하고 처리량이 줄었다.</li>
+<li>요약: 최근 60초 창에서 p95가 6000ms로 증가했고, 분당 요청 수가 평균보다 줄어들어 처리량 급감 규칙이 켜졌습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/slow 경로에 느린 요청이 몰려 워커가 포화되어 전체 응답 시간이 늘어났다.</li>
+<li>기존 요청 처리량이 많아지면서 gunicorn 워커가 부족하여 느린 요청이 발생했다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>느린 요청이 /slow 경로에 몰렸는지 확인한다.</li>
+<li>docker compose logs app에서 latency_ms가 큰 줄과 그 경로를 확인한다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s9_saturation / all_v2</h3>
+<ul>
+<li>제목: /slow가 워커를 붙잡아 처리량이 줄어든 포화 (R2+R3, 보류)</li>
+<li>정답 설명: /slow 요청이 sync 워커를 붙잡아 다른 요청이 대기하고 처리량이 줄었다.</li>
+<li>요약: 응답 지연이 증가한 것으로 보아 워커 포화나 느린 요청이 원인일 가능성이 높습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/slow 경로에 느린 요청이 몰렸을 수 있습니다.</li>
+<li>알 수 없음: 이유</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>느린 요청이 /slow 경로에 몰렸는지 확인합니다.</li>
+<li>docker compose logs app의 latency_ms가 큰 줄과 그 경로를 확인합니다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s9_saturation / match_v1</h3>
+<ul>
+<li>제목: /slow가 워커를 붙잡아 처리량이 줄어든 포화 (R2+R3, 보류)</li>
+<li>정답 설명: /slow 요청이 sync 워커를 붙잡아 다른 요청이 대기하고 처리량이 줄었다.</li>
+<li>요약: 최근 60초에 분당 요청 수가 감소했고, p95 지연이 6000ms를 초과하여 규칙 R2와 R3이 켜졌습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/slow 경로에 느린 요청이 몰렸을 수 있으며, 이로 인해 워커가 부담스러워 전체 응답 시간이 늘어났습니다.</li>
+<li>현재 요청 수가 평소보다 적어 처리량이 부족한 것으로 보입니다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>느린 요청이 /slow 경로에만 집중되었는지 확인합니다.</li>
+<li>gunicorn 워커의 로그에서 latency_ms가 큰 요청과 그 경로를 확인합니다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s9_saturation / match_v2</h3>
+<ul>
+<li>제목: /slow가 워커를 붙잡아 처리량이 줄어든 포화 (R2+R3, 보류)</li>
+<li>정답 설명: /slow 요청이 sync 워커를 붙잡아 다른 요청이 대기하고 처리량이 줄었다.</li>
+<li>요약: p95가 6000ms를 초과하면서 분당 요청 수가 감소하여 앱의 처리량이 급격히 줄어들었다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/slow 경로의 느린 요청이 전체 처리량을 압도하고 있다.</li>
+<li>알 수 없음: 이유</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>느린 요청이 /slow 경로에만 집중되어 있는지 확인한다.</li>
+<li>docker compose logs app에서 latency_ms가 큰 줄과 해당 경로를 확인한다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s10_5xx_no_detail / nr_v1</h3>
+<ul>
+<li>제목: 예외 정보 없이 /report에 5xx가 몰린 약한 근거 (R1, 보류)</li>
+<li>정답 설명: 5xx가 /report에 몰렸지만 예외 정보가 없고 표본이 작아 원인을 단정할 수 없다(알 수 없음이 정답).</li>
+<li>요약: 서비스의 요청 수가 감소했고 5xx 에러가 발생하여 심각도가 critical 수준으로 평가되었습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>:8080 서버의 부하가 증가하여 응답이 느려졌습니다.</li>
+<li>/report 경로의 처리 로직에 문제가 있을 수 있습니다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>:8080 서버의 CPU와 메모리 사용량을 확인하세요.</li>
+<li>/report 경로의 로그를 확인하여 에러 원인을 파악하세요.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s10_5xx_no_detail / all_v1</h3>
+<ul>
+<li>제목: 예외 정보 없이 /report에 5xx가 몰린 약한 근거 (R1, 보류)</li>
+<li>정답 설명: 5xx가 /report에 몰렸지만 예외 정보가 없고 표본이 작아 원인을 단정할 수 없다(알 수 없음이 정답).</li>
+<li>요약: 5xx 오류 비율이 20%를 넘어서 심각한 장애가 발생했습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/에 DB 연결 문제로 인한 500 오류가 발생하고 있습니다.</li>
+<li>/report 경로에서 5xx 오류가 발생하고 있습니다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>/와 /report 경로의 5xx 오류가 DB 연결 문제 때문인지 확인합니다.</li>
+<li>docker compose ps로 db와 app 상태를 확인합니다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s10_5xx_no_detail / all_v2</h3>
+<ul>
+<li>제목: 예외 정보 없이 /report에 5xx가 몰린 약한 근거 (R1, 보류)</li>
+<li>정답 설명: 5xx가 /report에 몰렸지만 예외 정보가 없고 표본이 작아 원인을 단정할 수 없다(알 수 없음이 정답).</li>
+<li>요약: 5xx 오류 비율이 20%를 초과하여 심각한 장애가 발생했습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/report 경로에서 5xx 오류가 발생하고 있습니다.</li>
+<li>알 수 없음: 이유</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>5xx 오류가 /report에 몰렸는지 확인합니다.</li>
+<li>docker compose ps로 app과 db 상태를 확인합니다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s10_5xx_no_detail / match_v1</h3>
+<ul>
+<li>제목: 예외 정보 없이 /report에 5xx가 몰린 약한 근거 (R1, 보류)</li>
+<li>정답 설명: 5xx가 /report에 몰렸지만 예외 정보가 없고 표본이 작아 원인을 단정할 수 없다(알 수 없음이 정답).</li>
+<li>요약: 최근 60초 동안 / 경로에서 5xx 오류가 20%를 초과하여 발생하고 있습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/에 연결 문제가 있을 수 있습니다.</li>
+<li>/report 경로에서만 5xx 오류가 발생하고 있으므로 특정 요청이 문제를 일으키는 것 같습니다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>docker compose ps로 db와 app 상태를 확인합니다.</li>
+<li>/report 경로의 요청을 분석하여 문제의 원인을 파악합니다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s10_5xx_no_detail / match_v2</h3>
+<ul>
+<li>제목: 예외 정보 없이 /report에 5xx가 몰린 약한 근거 (R1, 보류)</li>
+<li>정답 설명: 5xx가 /report에 몰렸지만 예외 정보가 없고 표본이 작아 원인을 단정할 수 없다(알 수 없음이 정답).</li>
+<li>요약: / 경로에서 5xx 오류가 발생하고 있어 원인을 파악해야 합니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>/ 경로의 DB 연결 문제로 인한 5xx 오류가 발생할 수 있습니다.</li>
+<li>알 수 없음: 이유</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>docker compose ps로 db와 app 상태를 확인하고, docker compose logs db로 db 로그를 확인합니다.</li>
+<li>5xx가 /에 몰렸는지 확인합니다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s11_probe_timeout / nr_v1</h3>
+<ul>
+<li>제목: 프로브 timeout, 로그 집계 없음 (R4, 보류)</li>
+<li>정답 설명: 앱이 응답하지 않는다(정지 또는 느린 요청으로 워커 포화). 로그 집계가 없으므로 에러율·지연 숫자를 근거로 삼으면 안 된다.</li>
+<li>요약: 서비스가 R4 규칙에 의해 중단되었으며, 최근 2회 연속 timeout 오류가 발생했습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>서비스 로드가 평소보다 증가하여 timeout이 발생했을 수 있습니다.</li>
+<li>네트워크 연결 문제로 인해 요청이 시간 초과되었을 가능성이 있습니다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>요청량이 평균 이상인지 확인합니다.</li>
+<li>네트워크 연결 상태를 확인합니다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s11_probe_timeout / all_v1</h3>
+<ul>
+<li>제목: 프로브 timeout, 로그 집계 없음 (R4, 보류)</li>
+<li>정답 설명: 앱이 응답하지 않는다(정지 또는 느린 요청으로 워커 포화). 로그 집계가 없으므로 에러율·지연 숫자를 근거로 삼으면 안 된다.</li>
+<li>요약: Watcher가 15초마다 /healthz를 요청했으나 2초 안에 응답이 없어 2회 연속 실패했으며, 앱이 완전히 멈춰 있는 것으로 보인다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>app 컨테이너가 정지하거나 재시작 중이다.</li>
+<li>app은 시작할 때 DB에 접속하므로, DB가 준비되지 않아 app이 뜨지 못한다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>docker compose ps로 app과 db가 실행 중인지 확인한다.</li>
+<li>docker compose logs app의 마지막 줄과, 정지 직전 요청이 느렸는지 확인한다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s11_probe_timeout / all_v2</h3>
+<ul>
+<li>제목: 프로브 timeout, 로그 집계 없음 (R4, 보류)</li>
+<li>정답 설명: 앱이 응답하지 않는다(정지 또는 느린 요청으로 워커 포화). 로그 집계가 없으므로 에러율·지연 숫자를 근거로 삼으면 안 된다.</li>
+<li>요약: app 컨테이너가 정지하거나 DB 접속 실패로 인해 /healthz가 응답하지 않아 앱이 무응답 상태이다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>app 컨테이너가 정지하거나 재시작 중이다.</li>
+<li>app은 시작할 때 DB에 접속하므로, db가 준비되지 않으면 app이 뜨지 못한다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>docker compose ps로 app과 db가 실행 중인지 확인한다.</li>
+<li>docker compose logs app의 마지막 줄과, 정지 직전 요청이 느렸는지 확인한다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s11_probe_timeout / match_v1</h3>
+<ul>
+<li>제목: 프로브 timeout, 로그 집계 없음 (R4, 보류)</li>
+<li>정답 설명: 앱이 응답하지 않는다(정지 또는 느린 요청으로 워커 포화). 로그 집계가 없으므로 에러율·지연 숫자를 근거로 삼으면 안 된다.</li>
+<li>요약: Watcher가 15초마다 /healthz를 호출하는데 2초 안에 응답이 없는 일이 2번 연속 발생하여 앱이 무응답 상태가 됨</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>:app 컨테이너가 정지했거나 재시작 중이다.</li>
+<li>:app이 시작할 때 DB에 접속하므로, db가 준비되지 않으면 app이 뜨지 못한다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>:docker compose ps로 app과 db가 실행 중인지 확인한다.</li>
+<li>:docker compose logs app의 마지막 줄과, 정지 직전 요청이 느렸는지 확인한다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+<h3>s11_probe_timeout / match_v2</h3>
+<ul>
+<li>제목: 프로브 timeout, 로그 집계 없음 (R4, 보류)</li>
+<li>정답 설명: 앱이 응답하지 않는다(정지 또는 느린 요청으로 워커 포화). 로그 집계가 없으므로 에러율·지연 숫자를 근거로 삼으면 안 된다.</li>
+<li>요약: 애플리케이션이 정지하거나 DB 접속이 실패했을 가능성이 높습니다.</li>
+<li>원인 후보:</li>
+</ul>
+<ol>
+<li>app 컨테이너가 정지했거나 재시작 중이다.</li>
+<li>db가 준비되지 않아 앱이 시작되지 못한다.</li>
+</ol>
+<ul>
+<li>확인할 항목:</li>
+</ul>
+<ol>
+<li>docker compose ps로 app과 db가 실행 중인지 확인한다.</li>
+<li>docker compose logs app의 마지막 줄과, 정지 직전 요청이 느렸는지 확인한다.</li>
+</ol>
+<ul>
+<li>정확성 0~2: ____ / 유용성 0~2: ____</li>
+</ul>
+</main>
+</body>
+</html>
