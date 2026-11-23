@@ -40,7 +40,8 @@ def test_system_prompt_v3_is_pinned():
 
 def test_conditions_include_all_v3_and_keep_the_rest():
     assert variants.CONDITIONS["all_v3"] == ("v3", "all")
-    assert {k: v for k, v in variants.CONDITIONS.items() if k != "all_v3"} == {
+    # all_v3와, T10에서 더한 chunk_v1(정의는 test_eval_t10.py가 고정)을 뺀 나머지는 그대로여야 한다.
+    assert {k: v for k, v in variants.CONDITIONS.items() if k not in ("all_v3", "chunk_v1")} == {
         "nr_v1": ("v1", "none"), "all_v1": ("v1", "all"), "all_v2": ("v2", "all"),
         "match_v1": ("v1", "match"), "match_v2": ("v2", "match")}
 

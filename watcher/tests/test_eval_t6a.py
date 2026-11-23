@@ -51,9 +51,11 @@ def test_system_prompt_v2_is_pinned():
 
 
 def test_conditions_table():
-    assert variants.CONDITIONS == {"nr_v1": ("v1", "none"), "all_v1": ("v1", "all"), "all_v2": ("v2", "all"),
-                                   "match_v1": ("v1", "match"), "match_v2": ("v2", "match"),
-                                   "all_v3": ("v3", "all")}
+    # T10에서 더한 chunk_v1 하나만 비교에서 뺀다(그 정의는 test_eval_t10.py가 고정). 기존 조건 정의는 그대로 비교한다.
+    existing = {k: v for k, v in variants.CONDITIONS.items() if k != "chunk_v1"}
+    assert existing == {"nr_v1": ("v1", "none"), "all_v1": ("v1", "all"), "all_v2": ("v2", "all"),
+                        "match_v1": ("v1", "match"), "match_v2": ("v2", "match"),
+                        "all_v3": ("v3", "all")}
 
 
 @pytest.mark.parametrize("rb", ["", "[런북] 제목\n본문"])

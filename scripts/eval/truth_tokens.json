@@ -1,0 +1,6 @@
+{"s12_new_exception": ["/payment", "KeyError"],
+ "s15_timeout_error": ["/checkout", "TimeoutError"],
+ "s16_real_error_shape": ["/error", "RuntimeError"],
+ "s17_db_new_path": ["OperationalError", "DB", "db", "데이터베이스"],
+ "s18_new_exception_report": ["/report", "ValueError"],
+ "s19_real_shape_other_path": ["/boom", "RuntimeError"]}
