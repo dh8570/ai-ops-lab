@@ -120,15 +120,27 @@ def parse_settings(text, available) -> list:
     return chosen
 
 
-def runbook_text_for(mode: str, scenario: dict, all_text: str, blocks) -> str:
-    """런북 모드별 글: none은 "", all은 전체, match는 그 시나리오의 current_rules와 맞는 블록만."""
+def runbook_and_chunks_for(mode: str, scenario: dict, all_text: str, blocks, chunks=None,
+                           now_ts: float = NOW_TS) -> tuple:
+    """(런북 글, 선택된 조각 id 목록). chunk 모드만 근거를 먼저 만들어 근거의 내용으로 조각을 고른다(T10).
+    나머지 모드는 근거를 쓰지 않고 조각 목록은 빈 목록이다."""
     if mode == "none":
-        return ""
+        return "", []
     if mode == "all":
-        return all_text
+        return all_text, []
     if mode == "match":
-        return variants.select_runbooks(blocks or [], scenario["current_rules"])
+        return variants.select_runbooks(blocks or [], scenario["current_rules"]), []
+    if mode == "chunk":
+        evidence, _ = _build_evidence(scenario, "", now_ts)
+        return variants.chunk_runbook_text(
+            evidence, blocks, variants.load_chunks(variants.CHUNK_DIR) if chunks is None else chunks)
     raise ValueError(f"알 수 없는 런북 모드: {mode}")
+
+
+def runbook_text_for(mode: str, scenario: dict, all_text: str, blocks, chunks=None, now_ts: float = NOW_TS) -> str:
+    """런북 모드별 글: none은 "", all은 전체, match는 그 시나리오의 current_rules와 맞는 블록만,
+    chunk는 근거 내용으로 고른 조각(T10)."""
+    return runbook_and_chunks_for(mode, scenario, all_text, blocks, chunks, now_ts)[0]
 
 
 def load_scenarios(directory, only=None, keywords: str = "v1") -> list:
@@ -168,14 +180,20 @@ def make_incident(scenario: dict, now_ts: float = NOW_TS) -> state.Incident:
                           opened, None, 1, 0)
 
 
-def build_prompt(scenario: dict, runbooks_text: str, now_ts: float = NOW_TS, prompt: str = "v1"):
-    """(근거 dict, messages, 창 통계). 운영의 dispatcher가 쓰는 함수 그대로다(prompt v2만 variants를 거친다)."""
+def _build_evidence(scenario: dict, runbooks_text: str, now_ts: float = NOW_TS):
+    """(근거 dict, 창 통계). runbooks_text는 근거 축소 판정(토큰 추정)에만 쓰인다."""
     records = expand_records(scenario, now_ts) if scenario["records_available"] else None
     window = stats.summarize(records or [], WINDOW_SEC, EXCLUDE_PATHS)
     evidence = analysis.build_evidence(
         make_incident(scenario, now_ts), window, records, scenario["baseline_rpm"], scenario["probe"], now_ts,
         window_sec=WINDOW_SEC, exclude_paths=EXCLUDE_PATHS, runbooks_text=runbooks_text,
         current_rules=scenario["current_rules"])
+    return evidence, window
+
+
+def build_prompt(scenario: dict, runbooks_text: str, now_ts: float = NOW_TS, prompt: str = "v1"):
+    """(근거 dict, messages, 창 통계). 운영의 dispatcher가 쓰는 함수 그대로다(prompt v2만 variants를 거친다)."""
+    evidence, window = _build_evidence(scenario, runbooks_text, now_ts)
     return evidence, variants.build_messages_variant(evidence, runbooks_text, prompt), window
 
 
@@ -201,7 +219,8 @@ def _parsed_dict(parsed):
 
 
 def run_all(scenarios, runbooks_text, *, chat, url, model, cfg, keep_alive, connect_timeout, total_timeout,
-            now_ts: float = NOW_TS, on_record=None, settings=SETTINGS, conditions=CONDITIONS, blocks=None):
+            now_ts: float = NOW_TS, on_record=None, settings=SETTINGS, conditions=CONDITIONS, blocks=None,
+            chunks=None):
     """시나리오 → 조건 → 설정 순으로 호출한다(같은 조건의 호출이 연달아 가고, 호출은 서로 독립 요청이다).
     conditions는 조건 이름 목록(별칭 가능), blocks는 match 모드가 쓰는 variants.load_runbook_blocks 결과다.
     실패해도 이유를 기록하고 계속하며, 연속 MAX_CONSECUTIVE_FAILS번 실패하면 멈춘다.
@@ -211,7 +230,7 @@ def run_all(scenarios, runbooks_text, *, chat, url, model, cfg, keep_alive, conn
     for sc in scenarios:
         for cond in conditions:
             prompt, mode = condition_spec(cond)
-            rb = runbook_text_for(mode, sc, runbooks_text, blocks)
+            rb, chunk_ids = runbook_and_chunks_for(mode, sc, runbooks_text, blocks, chunks, now_ts)
             _, messages, _ = build_prompt(sc, rb, now_ts, prompt)
             system, evidence_text = messages[0]["content"], messages[1]["content"]
             schema = variants.schema_for(prompt)
@@ -224,6 +243,7 @@ def run_all(scenarios, runbooks_text, *, chat, url, model, cfg, keep_alive, conn
                        "model": model, "options": options.as_dict(), "system_sha256": _sha256(system),
                        "est_prompt_tokens": estimate_prompt_tokens(messages),
                        "prompt_version": prompt, "runbook_mode": mode, "runbook_chars": len(rb),
+                       "chunks": chunk_ids,
                        "holdout": bool(sc.get("holdout")), "schema": "v3" if prompt == "v3" else "v1",
                        "n_causes": len(parsed.causes) if parsed and parsed.ok else None,
                        "n_checks": len(parsed.checks) if parsed and parsed.ok else None,
@@ -416,6 +436,8 @@ def render_scoreboard(meta: dict, records: list, scenarios: list) -> str:
         L += _compare_tables(records, scenarios, conds)
     if meta.get("compare_t6b"):
         L += _t6b_tables(records, scenarios, conds)
+    if any(condition_spec(c)[1] == "chunk" for c in conds):
+        L += _chunk_table(records, scenarios, conds)
     if any("score_recorded" in r for r in records):
         L += _recorded_diff(records, "⑪" if compare else "⑦")
     return "\n".join(L) + "\n"
@@ -425,7 +447,7 @@ def _set_of(sc) -> str:
     """시나리오의 묶음: design(설계), holdout1(T6a 보류, 결과를 이미 봄), holdout2(T6b 새 보류)."""
     if not sc.get("holdout"):
         return "design"
-    return "holdout2" if sc.get("holdout_set", 1) == 2 else "holdout1"
+    return {2: "holdout2", 3: "holdout3"}.get(sc.get("holdout_set", 1), "holdout1")
 
 
 def _pooled(records, c, ids, key) -> str:
@@ -437,7 +459,7 @@ def _pooled(records, c, ids, key) -> str:
 def _strict_table(records, scenarios, conds) -> list:
     """시나리오 x 조건 strict_v3 통과율(warm 3회, var 5회 각각)."""
     counted = ("warm", "var")
-    label = {"design": "", "holdout1": " (보류)", "holdout2": " (보류 2)"}
+    label = {"design": "", "holdout1": " (보류)", "holdout2": " (보류 2)", "holdout3": " (보류 3)"}
     return _table(["시나리오", *(f"{c} {s}" for c in conds for s in counted)],
                   [(sc["id"] + label[_set_of(sc)],
                     *(_frac(_sel(records, scenario=sc["id"], condition=c, setting=s), "strict_v3_passed")
@@ -535,6 +557,20 @@ def _t6b_tables(records, scenarios, conds) -> list:
     return L
 
 
+def _chunk_table(records, scenarios, conds) -> list:
+    """T10 표 ⑯: 시나리오 x 선택된 조각 id (chunk 모드 조건만. 번호는 ⑮ 다음)."""
+    chunk_conds = [c for c in conds if condition_spec(c)[1] == "chunk"]
+    L = ["", "## ⑯ 시나리오 x 선택된 조각 id (chunk 모드. '-'는 아무 조각도 주지 않음)", ""]
+    rows = []
+    for sc in scenarios:
+        cells = []
+        for c in chunk_conds:
+            first = next(iter(_sel(records, scenario=sc["id"], condition=c)), None)
+            cells.append("(기록 없음)" if first is None else (", ".join(first.get("chunks", [])) or "-"))
+        rows.append((sc["id"], *cells))
+    return L + _table(["시나리오", *chunk_conds], rows) + [""]
+
+
 def _cache_by_setting(rows) -> str:
     """설정별 prompt_eval_cached_count 평균(예: 'prod 120 / warm 340')."""
     parts = []
@@ -568,7 +604,7 @@ def _recorded_diff(records, label: str = "⑦") -> list:
 
 # ---------------------------------------------------------------- 실행 진입점
 
-def _dry(scenarios, runbooks_text, out, conditions=CONDITIONS, blocks=None) -> None:
+def _dry(scenarios, runbooks_text, out, conditions=CONDITIONS, blocks=None, chunks=None) -> None:
     """Ollama를 부르지 않고 프롬프트를 보여 준다.
     system 글은 (조건, system 내용)마다 한 번만 전문을 보이고 시나리오에는 sha256 앞부분만 적는다
     (match 조건은 시나리오마다 system이 다를 수 있다)."""
@@ -576,10 +612,12 @@ def _dry(scenarios, runbooks_text, out, conditions=CONDITIONS, blocks=None) -> N
     for sc in scenarios:
         for cond in conditions:
             prompt, mode = condition_spec(cond)
-            rb = runbook_text_for(mode, sc, runbooks_text, blocks)
+            rb, chunk_ids = runbook_and_chunks_for(mode, sc, runbooks_text, blocks, chunks)
             _, messages, window = build_prompt(sc, rb, NOW_TS, prompt)
             system, user = messages[0]["content"], messages[1]["content"]
             out(f"===== {sc['id']} / {cond} =====")
+            if mode == "chunk":
+                out(f"선택된 조각: {', '.join(chunk_ids) or '-'}")
             out(f"추정 토큰 {estimate_prompt_tokens(messages)} (system {len(system)} + user {len(user)}), "
                 f"창 통계 requests={window.requests} 5xx={window.errors_5xx} "
                 f"p95={window.p95_ms:.0f} rpm={window.rpm:.0f}, "
@@ -612,7 +650,7 @@ def _read_raw(path) -> list:
     return [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
-def rescore(rows, scenarios, runbooks_text, blocks=None) -> list:
+def rescore(rows, scenarios, runbooks_text, blocks=None, chunks=None) -> list:
     """raw 기록의 응답 글을 다시 parse_answer와 score_answer로 채점한다. Ollama를 부르지 않는다.
     근거·런북 글은 build_prompt로 다시 만든다(시나리오가 같으면 결정적). 원본 점수는 score_recorded에 남긴다."""
     by_id = {sc["id"]: sc for sc in scenarios}
@@ -622,10 +660,10 @@ def rescore(rows, scenarios, runbooks_text, blocks=None) -> list:
         if sc is None:
             raise ValueError(f"raw의 시나리오를 찾을 수 없다: {row['scenario']}")
         prompt, mode = condition_spec(row["condition"])
-        rb = runbook_text_for(mode, sc, runbooks_text, blocks)
+        rb, chunk_ids = runbook_and_chunks_for(mode, sc, runbooks_text, blocks, chunks)
         _, messages, _ = build_prompt(sc, rb, NOW_TS, prompt)
         parsed = variants.parse_answer_variant(row["text"], variants.schema_for(prompt)) if row["ok"] else None
-        out_rows.append({**row, "score_recorded": row["score"], "parsed": _parsed_dict(parsed),
+        out_rows.append({**row, "chunks": chunk_ids, "score_recorded": row["score"], "parsed": _parsed_dict(parsed),
                          "score": scoring.score_answer(sc, parsed, messages[1]["content"], rb)})
     return out_rows
 
@@ -650,6 +688,7 @@ def main(argv=None, *, chat=llm_client.chat, version=llm_client.version, out=pri
                     help="쉼표로 구분한 조건(기본 no_runbook,runbook = nr_v1,all_v1의 별칭). "
                          f"가능: {', '.join(variants.CONDITIONS)}")
     ap.add_argument("--settings", default=None, help="쉼표로 구분한 설정(예: warm,var). 기본 전체, warm은 warmup 포함")
+    ap.add_argument("--chunks", default=str(variants.CHUNK_DIR), help="런북 조각 폴더(chunk 조건이 쓴다)")
     ap.add_argument("--holdout", default=str(HOLDOUT_DIR), help="보류 시나리오 폴더(--with-holdout일 때만 쓴다)")
     ap.add_argument("--with-holdout", action="store_true", help="보류 시나리오(s8~s11)를 시나리오에 합친다")
     ap.add_argument("--holdout2", default=str(HOLDOUT2_DIR), help="새 보류 시나리오 폴더(--with-holdout2일 때만 쓴다)")
@@ -676,8 +715,9 @@ def main(argv=None, *, chat=llm_client.chat, version=llm_client.version, out=pri
         return 2
     runbooks_text = analysis.load_runbooks(args.runbooks)
     blocks = variants.load_runbook_blocks(args.runbooks)
+    chunks = variants.load_chunks(args.chunks)
     if args.dry:
-        _dry(scenarios, runbooks_text, out, conditions, blocks)
+        _dry(scenarios, runbooks_text, out, conditions, blocks, chunks)
         return 0
 
     started = now or datetime.now(UTC)
@@ -694,7 +734,7 @@ def main(argv=None, *, chat=llm_client.chat, version=llm_client.version, out=pri
                          title="# 장애 분석 비교 채점표 (A1-T6b)")
 
     if args.rescore:
-        return _main_rescore(args, scenarios, runbooks_text, blocks, base_meta, out_dir, stamp, out)
+        return _main_rescore(args, scenarios, runbooks_text, blocks, base_meta, out_dir, stamp, out, chunks)
 
     cfg = config.Config()
     model = args.model or cfg.llm_model
@@ -719,7 +759,7 @@ def main(argv=None, *, chat=llm_client.chat, version=llm_client.version, out=pri
         records, aborted = run_all(scenarios, runbooks_text, chat=chat, url=args.url, model=model, cfg=cfg,
                                    keep_alive=cfg.llm_keep_alive, connect_timeout=cfg.llm_connect_timeout,
                                    total_timeout=cfg.llm_timeout, on_record=save, settings=settings,
-                                   conditions=conditions, blocks=blocks)
+                                   conditions=conditions, blocks=blocks, chunks=chunks)
     meta["aborted"] = aborted
     board_path.write_text(render_scoreboard(meta, records, scenarios), encoding="utf-8")
 
@@ -738,13 +778,13 @@ def main(argv=None, *, chat=llm_client.chat, version=llm_client.version, out=pri
     return 0
 
 
-def _main_rescore(args, scenarios, runbooks_text, blocks, base_meta, out_dir, stamp, out) -> int:
+def _main_rescore(args, scenarios, runbooks_text, blocks, base_meta, out_dir, stamp, out, chunks=None) -> int:
     """--rescore: raw를 읽어 다시 채점하고 scoreboard-rescore-<UTC>.md만 만든다(raw는 만들지 않는다)."""
     try:
         rows = _read_raw(args.rescore)
         used = {r["scenario"] for r in rows}
         scenarios = [sc for sc in scenarios if sc["id"] in used]
-        records = rescore(rows, scenarios, runbooks_text, blocks)
+        records = rescore(rows, scenarios, runbooks_text, blocks, chunks)
     except (OSError, ValueError, KeyError) as e:
         out(f"재채점 실패: {e}")
         return 2

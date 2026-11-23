@@ -113,3 +113,71 @@ def build_messages_variant(evidence: dict, runbooks_text: str, prompt: str) -> l
         evidence = analysis._shrunk(evidence)
     return [{"role": "system", "content": system},
             {"role": "user", "content": analysis.mask(analysis.render_evidence(evidence))}]
+
+
+# ---------------------------------------------------------------- T10: 원인 단위 조각(chunk) 선택
+# 위의 기존 코드·조건은 그대로 두고, 아래만 새로 더한다.
+
+CHUNK_DIR = HERE / "runbook_chunks"
+CONDITIONS["chunk_v1"] = ("v1", "chunk")        # 프롬프트 v1 + 근거 내용으로 고른 런북 조각
+
+GENERIC_CHUNK = "generic"                        # 파일 01z_generic.md. 어느 원인도 못 고를 때만 준다
+_DB_KIND_MARKS = ("operationalerror", "psycopg", "interfaceerror", "databaseerror")   # 사전 등록 규칙 b
+_CHUNK_FILE = re.compile(r"^\d+[a-z]_(.+)$")
+
+
+def load_chunks(directory) -> dict:
+    """조각 폴더의 *.md를 파일 이름순으로 읽어 {조각 id: "[런북] 제목\\n본문"}을 돌려준다.
+    블록 글 모양과 '초안:' 줄 건너뛰기는 load_runbook_blocks와 같다. 파일 이름 01a_<id>.md에서 <id>가 조각 id다."""
+    d = Path(directory)
+    if not d.is_dir():
+        return {}
+    out: dict = {}
+    for f in sorted(d.glob("*.md")):
+        m = _CHUNK_FILE.match(f.stem)
+        if not m:
+            continue
+        lines = f.read_text(encoding="utf-8").splitlines()
+        while lines and (not lines[0].strip() or lines[0].strip().startswith(analysis.DRAFT_MARK)):
+            lines.pop(0)
+        if not lines:
+            continue
+        title = lines[0].lstrip("#").strip()
+        body = "\n".join(lines[1:]).strip()
+        out[m.group(1)] = f"[런북] {title}\n{body}" if body else f"[런북] {title}"
+    return out
+
+
+def select_chunks(evidence: dict, available=None) -> list:
+    """근거의 내용(오류 종류, 5xx가 난 경로)만 보고 조각 id 목록을 고정 순서(error_path, db_connection)로 돌려준다.
+    규칙 id·시나리오 이름·정답 설명은 보지 않는다.
+    a) error_path: 오류 종류가 정확히 "RuntimeError"이거나 5xx가 난 경로에 "/error"가 있다.
+    b) db_connection: 오류 종류 이름에 operationalerror/psycopg/interfaceerror/databaseerror(대소문자 무시)가 들어 있다.
+    c) 런북 원본의 원인은 2개뿐이라 추가 조각은 없다.
+    d) a·b 모두 아니면 generic 조각이 available에 있을 때만 그것을, 없으면 빈 목록.
+    available은 조각 id 모음(기본: CHUNK_DIR의 조각)."""
+    kinds = [k["kind"] for k in evidence.get("top_error_kinds", [])]
+    err_paths = [p["path"] for p in evidence.get("top_paths", []) if p["status_counts"].get("5xx", 0) > 0]
+    chosen = []
+    if "RuntimeError" in kinds or "/error" in err_paths:
+        chosen.append("error_path")
+    if any(mark in k.lower() for k in kinds for mark in _DB_KIND_MARKS):
+        chosen.append("db_connection")
+    if not chosen:
+        have = load_chunks(CHUNK_DIR) if available is None else available
+        if GENERIC_CHUNK in have:
+            chosen.append(GENERIC_CHUNK)
+    return chosen
+
+
+def chunk_runbook_text(evidence: dict, blocks, chunks) -> tuple:
+    """chunk 모드의 (런북 글, 선택된 조각 id 목록). 켜진 규칙은 근거의 incident.fired_rules를 본다.
+    R1이 있으면 select_chunks 결과, R2·R3·R4가 있으면 그 규칙의 원본 블록(match와 같은 방식)을 이 순서로
+    "\\n\\n"으로 잇는다."""
+    fired = {r["rule"] for r in evidence["incident"]["fired_rules"]}
+    ids = select_chunks(evidence, chunks) if "R1" in fired else []
+    parts = [chunks[i] for i in ids if i in chunks]
+    other = select_runbooks(blocks or [], fired & {"R2", "R3", "R4"})
+    if other:
+        parts.append(other)
+    return "\n\n".join(parts), ids
